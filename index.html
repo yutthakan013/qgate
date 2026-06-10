@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Defect Q-Gate Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0D0F14;--bg2:#13161E;--bg3:#1A1E2A;--bg4:#222738;
+  --line:rgba(255,255,255,0.07);--line2:rgba(255,255,255,0.14);
+  --text:#F0F2F8;--text2:#8B91A8;--text3:#555C75;
+  --cyan:#00E5CC;--cyan-dim:rgba(0,229,204,0.12);--cyan-glow:rgba(0,229,204,0.25);
+  --red:#FF4D6A;--red-dim:rgba(255,77,106,0.15);
+  --amber:#FFB547;--amber-dim:rgba(255,181,71,0.15);
+  --green:#3DDB8A;--green-dim:rgba(61,219,138,0.12);
+  --blue:#5B9BF8;--purple:#C478F5;
+  --r:10px;--r-sm:6px;
+}
+body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;height:52px;background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:300;}
+.topbar-left{display:flex;align-items:center;gap:12px;}
+.logo-dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan-glow);animation:pulse 2.4s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+.topbar-title{font-size:13px;font-weight:600;letter-spacing:.05em;}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;}
+.sync-dot.syncing{background:var(--amber);animation:pulse 1s infinite;}
+.sync-dot.error{background:var(--red);animation:none;}
+.sync-label{font-size:11px;color:var(--text3);}
+.btn-topbar{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;border:1px solid var(--line2);background:var(--bg3);color:var(--text2);font-size:12px;font-family:'Space Grotesk',sans-serif;cursor:pointer;transition:all .2s;}
+.btn-topbar:hover{background:var(--bg4);color:var(--text);border-color:rgba(0,229,204,0.3);}
+.btn-topbar.primary{background:var(--cyan-dim);color:var(--cyan);border-color:rgba(0,229,204,0.3);}
+.btn-topbar.primary:hover{background:rgba(0,229,204,0.2);}
+.layout{display:flex;height:calc(100vh - 52px);}
+.sidebar{width:240px;min-width:240px;background:var(--bg2);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden;}
+.sidebar-header{padding:1rem;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+.sidebar-title{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;}
+.sidebar-scroll{flex:1;overflow-y:auto;padding:.5rem 0;}
+.sidebar-scroll::-webkit-scrollbar{width:4px;}
+.sidebar-scroll::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px;}
+.tree-year{margin-bottom:2px;}
+.tree-year-header{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;border-radius:6px;margin:0 6px;transition:background .15s;font-size:13px;font-weight:600;color:var(--text2);}
+.tree-year-header:hover{background:var(--bg3);}
+.tree-year-header.open{color:var(--cyan);}
+.tree-year-icon{font-size:10px;transition:transform .2s;color:var(--text3);}
+.tree-year-icon.open{transform:rotate(90deg);}
+.tree-year-badge{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--bg4);color:var(--text3);padding:1px 6px;border-radius:4px;}
+.tree-months{overflow:hidden;max-height:0;transition:max-height .25s ease;}
+.tree-months.open{max-height:600px;}
+.tree-month{margin-bottom:1px;}
+.tree-month-header{display:flex;align-items:center;gap:8px;padding:5px 8px 5px 24px;cursor:pointer;border-radius:6px;margin:0 6px;transition:background .15s;font-size:12px;color:var(--text2);}
+.tree-month-header:hover{background:var(--bg3);}
+.tree-month-header.open{color:var(--text);}
+.tree-month-icon{font-size:9px;transition:transform .2s;color:var(--text3);}
+.tree-month-icon.open{transform:rotate(90deg);}
+.tree-days{overflow:hidden;max-height:0;transition:max-height .3s ease;}
+.tree-days.open{max-height:1000px;}
+.tree-day{display:flex;align-items:center;gap:6px;padding:4px 8px 4px 38px;cursor:pointer;border-radius:6px;margin:0 6px;font-size:11px;color:var(--text3);transition:all .15s;font-family:'JetBrains Mono',monospace;}
+.tree-day:hover{background:var(--bg3);color:var(--text2);}
+.tree-day.active{background:var(--cyan-dim);color:var(--cyan);font-weight:600;}
+.tree-day-pct{margin-left:auto;font-size:10px;}
+.tree-day-peak{color:var(--red);font-size:9px;}
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.main::-webkit-scrollbar{width:6px;}
+.main::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px;}
+.main-header{padding:1.25rem 1.5rem .75rem;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-shrink:0;}
+.main-title{font-size:20px;font-weight:700;letter-spacing:-.02em;}
+.main-sub{font-size:12px;color:var(--text3);margin-top:4px;}
+.main-actions{display:flex;gap:8px;flex-shrink:0;}
+.content{padding:1.25rem 1.5rem;flex:1;}
+.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;text-align:center;color:var(--text3);}
+.welcome-icon{font-size:48px;opacity:.3;}
+.welcome-text{font-size:14px;}
+.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.25rem;}
+.metric{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:1rem 1.25rem;position:relative;overflow:hidden;}
+.metric-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;}
+.metric-value{font-size:28px;font-weight:700;line-height:1;letter-spacing:-.03em;}
+.metric-sub{font-size:11px;color:var(--text3);margin-top:6px;}
+.metric-icon{position:absolute;top:1rem;right:1rem;font-size:20px;opacity:.5;}
+.charts-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;margin-bottom:12px;}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:1.25rem;}
+.card-title{font-size:12px;font-weight:600;margin-bottom:4px;}
+.card-sub{font-size:11px;color:var(--text3);}
+.table-wrap{overflow-x:auto;margin-top:12px;}
+.def-table{width:100%;border-collapse:collapse;}
+.def-table th{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;padding:8px 10px;border-bottom:1px solid var(--line2);white-space:nowrap;text-align:left;}
+.def-table td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;}
+.def-table tr:hover td{background:rgba(255,255,255,.02);}
+.mono{font-family:'JetBrains Mono',monospace;}
+.red{color:var(--red);}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;}
+.badge-high{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,77,106,.25);}
+.badge-med{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(255,181,71,.2);}
+.badge-low{background:var(--green-dim);color:var(--green);border:1px solid rgba(61,219,138,.2);}
+.badge-zero{background:var(--bg3);color:var(--text3);border:1px solid var(--line);}
+.model-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block;}
+.expand-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;}
+.expand-btn:hover{background:var(--bg3);color:var(--text2);}
+.chips-row{display:flex;flex-wrap:wrap;gap:5px;padding:8px 10px 10px 38px;background:rgba(0,0,0,.12);}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:500;}
+.chip-sev1{background:rgba(255,77,106,.12);color:#ff7a8a;border:1px solid rgba(255,77,106,.2);}
+.chip-sev2{background:rgba(255,181,71,.12);color:#ffcc78;border:1px solid rgba(255,181,71,.2);}
+.chip-sev3{background:rgba(91,155,248,.1);color:#85b3fa;border:1px solid rgba(91,155,248,.18);}
+.chip-cnt{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;background:rgba(0,0,0,.25);padding:0 5px;border-radius:3px;}
+.table-footer{padding:8px 10px;background:var(--bg3);font-weight:600;font-size:13px;border-radius:0 0 var(--r-sm) var(--r-sm);display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 60px;}
+.images-section{margin-top:16px;}
+.images-section-title{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;}
+.images-grid{display:flex;flex-wrap:wrap;gap:8px;}
+.img-thumb{position:relative;width:90px;height:90px;border-radius:8px;overflow:hidden;border:1px solid var(--line2);cursor:pointer;background:var(--bg3);}
+.img-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.img-thumb-del{position:absolute;top:4px;right:4px;background:rgba(13,15,20,.8);border:none;border-radius:4px;color:var(--red);font-size:12px;cursor:pointer;padding:2px 5px;display:none;}
+.img-thumb:hover .img-thumb-del{display:block;}
+.img-add-btn{width:90px;height:90px;border-radius:8px;border:1px dashed var(--line2);background:var(--bg3);color:var(--text3);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px;transition:all .2s;}
+.img-add-btn:hover{border-color:var(--cyan);color:var(--cyan);}
+.img-add-icon{font-size:20px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;display:flex;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px);}
+.modal{background:var(--bg2);border:1px solid var(--line2);border-radius:14px;padding:1.75rem;max-width:640px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+.modal::-webkit-scrollbar{width:4px;}
+.modal::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px;}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:1.5rem;display:flex;align-items:center;justify-content:space-between;}
+.modal-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;}
+.modal-close:hover{color:var(--text);}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-full{grid-column:1/-1;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;}
+input,select,textarea{background:var(--bg3);border:1px solid var(--line2);border-radius:7px;color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:13px;padding:8px 12px;outline:none;transition:border-color .2s;width:100%;}
+input:focus,select:focus,textarea:focus{border-color:var(--cyan);}
+select option{background:var(--bg3);}
+textarea{resize:vertical;min-height:70px;}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--line);}
+.btn{display:flex;align-items:center;gap:6px;padding:8px 18px;border-radius:7px;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;border:none;}
+.btn-ghost{background:var(--bg3);color:var(--text2);border:1px solid var(--line2);}
+.btn-ghost:hover{background:var(--bg4);color:var(--text);}
+.btn-primary{background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(0,229,204,.3);}
+.btn-primary:hover{background:rgba(0,229,204,.2);}
+.btn-danger{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,77,106,.3);}
+.btn-danger:hover{background:rgba(255,77,106,.25);}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:5px;}
+.defect-editor{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:10px;}
+.defect-editor-row{display:flex;gap:8px;align-items:center;margin-bottom:6px;}
+.defect-editor-row input{flex:1;}
+.defect-editor-row .cnt-input{width:80px;flex:none;}
+.def-add-row{display:flex;gap:8px;margin-top:8px;}
+.def-add-row input{flex:1;}
+.model-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;}
+.model-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--line);border-radius:8px;}
+.model-color-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.model-item-name{flex:1;font-size:13px;}
+.model-item-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px;}
+.model-item-del:hover{color:var(--red);}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:600;display:flex;align-items:center;justify-content:center;cursor:zoom-out;}
+.lightbox img{max-width:90vw;max-height:90vh;border-radius:8px;object-fit:contain;}
+.confirm-msg{font-size:14px;color:var(--text2);margin:8px 0 1.5rem;}
+.year-summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+.month-summary-card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:1rem 1.25rem;cursor:pointer;transition:all .2s;}
+.month-summary-card:hover{border-color:var(--line2);transform:translateY(-1px);}
+.mscard-month{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;}
+.mscard-pct{font-size:24px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+.mscard-meta{font-size:11px;color:var(--text3);margin-top:4px;}
+.month-overview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px;}
+.day-card{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;transition:all .2s;}
+.day-card:hover{border-color:var(--line2);transform:translateY(-1px);}
+.day-card-date{font-size:11px;color:var(--text3);margin-bottom:4px;}
+.day-card-pct{font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+.day-card-def{font-size:11px;color:var(--text3);margin-top:2px;}
+.day-card-peak{color:var(--red);font-size:10px;margin-top:2px;}
+.peak-badge{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,77,106,.3);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg3);border:1px solid var(--line2);color:var(--text);padding:10px 18px;border-radius:8px;font-size:13px;z-index:800;box-shadow:0 8px 32px rgba(0,0,0,.4);animation:toastin .2s ease;pointer-events:none;}
+@keyframes toastin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+/* LOADING SCREEN */
+#loadingScreen{position:fixed;inset:0;background:var(--bg);z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+.loading-spinner{width:36px;height:36px;border:3px solid var(--bg4);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingScreen">
+  <div class="loading-spinner"></div>
+  <div style="font-size:13px;color:var(--text3);">กำลังโหลดข้อมูลจาก Supabase...</div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo-dot"></div>
+    <span class="topbar-title">Q-GATE DEFECT MONITOR</span>
+    <div style="display:flex;align-items:center;gap:5px;margin-left:8px;">
+      <div class="sync-dot" id="syncDot"></div>
+      <span class="sync-label" id="syncLabel">เชื่อมต่อแล้ว</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="btn-topbar" onclick="openModelManager()">⚙ Models</button>
+    <button class="btn-topbar" onclick="window.open('summary.html','_blank')" style="color:var(--purple);border-color:rgba(196,120,245,0.3);background:rgba(196,120,245,0.1);">🗂 Summary</button>
+    <button class="btn-topbar primary" onclick="openAddDay()">＋ เพิ่มข้อมูล</button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">โฟลเดอร์ข้อมูล</span>
+      <button class="btn-topbar btn-sm" style="padding:3px 8px;font-size:11px;" onclick="openAddYear()">+ ปี</button>
+    </div>
+    <div class="sidebar-scroll" id="sidebarTree"></div>
+  </div>
+  <div class="main" id="mainContent">
+    <div class="welcome" id="welcomeScreen">
+      <div class="welcome-icon">📋</div>
+      <div style="font-size:16px;font-weight:600;color:var(--text2);">เลือกข้อมูลจากแถบซ้าย</div>
+      <div class="welcome-text">หรือกด <strong style="color:var(--cyan)">＋ เพิ่มข้อมูล</strong> เพื่อเริ่มต้น</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div id="modalOverlay" class="modal-overlay" style="display:none" onclick="closeModalOnOverlay(event)"></div>
+
+<div id="modalDay" class="modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:510;">
+  <div class="modal-title"><span id="modalDayTitle">เพิ่มข้อมูลวัน</span><button class="modal-close" onclick="closeModal('modalDay')">✕</button></div>
+  <div class="form-grid">
+    <div class="form-group"><label>ปี</label><select id="dYear"></select></div>
+    <div class="form-group"><label>เดือน</label><select id="dMonth"></select></div>
+    <div class="form-group"><label>วันที่</label><input type="number" id="dDay" min="1" max="31" placeholder="1-31"></div>
+    <div class="form-group"><label>เป็น Peak? ⚠</label><select id="dPeak"><option value="0">ไม่ใช่</option><option value="1">ใช่ (Peak)</option></select></div>
+    <div class="form-group form-full"><label>ชิ้นงานต่อ Model</label><div id="partsInputs" style="display:flex;flex-direction:column;gap:6px;"></div></div>
+    <div class="form-group form-full"><label>Defect ต่อ Model</label><div id="defectsInputs" style="display:flex;flex-direction:column;gap:6px;"></div></div>
+    <div class="form-group form-full"><label>รายละเอียด Defect ต่อ Model</label><div id="defBreakdownEditor"></div></div>
+    <div class="form-group form-full"><label>หมายเหตุ / Top Defect</label><input type="text" id="dTopDef" placeholder="เช่น Scratch after paint (12)"></div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-ghost" onclick="closeModal('modalDay')">ยกเลิก</button>
+    <button class="btn btn-primary" onclick="saveDay()">💾 บันทึก</button>
+  </div>
+</div>
+
+<div id="modalYear" class="modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:510;">
+  <div class="modal-title"><span>เพิ่มปี</span><button class="modal-close" onclick="closeModal('modalYear')">✕</button></div>
+  <div class="form-group"><label>ปี (ค.ศ.)</label><input type="number" id="newYearInput" min="2020" max="2099" placeholder="เช่น 2027"></div>
+  <div class="form-actions"><button class="btn btn-ghost" onclick="closeModal('modalYear')">ยกเลิก</button><button class="btn btn-primary" onclick="saveYear()">เพิ่มปี</button></div>
+</div>
+
+<div id="modalMonth" class="modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:510;">
+  <div class="modal-title"><span>เพิ่มเดือน</span><button class="modal-close" onclick="closeModal('modalMonth')">✕</button></div>
+  <div class="form-grid">
+    <div class="form-group"><label>ปี</label><select id="newMonthYear"></select></div>
+    <div class="form-group"><label>เดือน</label><select id="newMonthMonth">
+      <option value="01">มกราคม</option><option value="02">กุมภาพันธ์</option><option value="03">มีนาคม</option><option value="04">เมษายน</option><option value="05">พฤษภาคม</option><option value="06">มิถุนายน</option><option value="07">กรกฎาคม</option><option value="08">สิงหาคม</option><option value="09">กันยายน</option><option value="10">ตุลาคม</option><option value="11">พฤศจิกายน</option><option value="12">ธันวาคม</option>
+    </select></div>
+  </div>
+  <div class="form-actions"><button class="btn btn-ghost" onclick="closeModal('modalMonth')">ยกเลิก</button><button class="btn btn-primary" onclick="saveMonth()">เพิ่มเดือน</button></div>
+</div>
+
+<div id="modalModels" class="modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:510;">
+  <div class="modal-title"><span>⚙ จัดการ Models</span><button class="modal-close" onclick="closeModal('modalModels')">✕</button></div>
+  <div class="model-list" id="modelList"></div>
+  <div style="display:flex;gap:8px;margin-top:12px;">
+    <input type="text" id="newModelName" placeholder="ชื่อ Model ใหม่" style="flex:1">
+    <input type="color" id="newModelColor" value="#5B9BF8" style="width:44px;padding:4px;">
+    <button class="btn btn-primary btn-sm" onclick="addModel()">+ เพิ่ม</button>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary" onclick="closeModal('modalModels');refreshAll()">✔ เสร็จสิ้น</button></div>
+</div>
+
+<div id="modalConfirm" class="modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:510;max-width:380px;">
+  <div class="modal-title"><span id="confirmTitle">ยืนยันการลบ</span><button class="modal-close" onclick="closeModal('modalConfirm')">✕</button></div>
+  <div class="confirm-msg" id="confirmMsg"></div>
+  <div class="form-actions"><button class="btn btn-ghost" onclick="closeModal('modalConfirm')">ยกเลิก</button><button class="btn btn-danger" id="confirmOkBtn">ลบ</button></div>
+</div>
+
+<div id="lightbox" class="lightbox" style="display:none" onclick="document.getElementById('lightbox').style.display='none'">
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// SUPABASE CONFIG
+// ══════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://rcmmfigunjlfrtcmioye.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_S27QAB2ZtE3jMyq0VyBw4Q_BHD0LnQK';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ══════════════════════════════════════════════════════
+// CONSTANTS & STATE
+// ══════════════════════════════════════════════════════
+const MONTH_NAMES_TH = ['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const MONTH_SHORT_TH = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+let MODELS = ['Front Redback','Rear Redback','5F00','Front MY21','Sport Hoop','Brow Fascia','Grille Carrier','Rear Applique','SAIC'];
+let MODEL_COLORS = ['#5B9BF8','#3DDB8A','#FF4D6A','#C478F5','#FFB547','#00E5CC','#8B91A8','#F87C5B','#F85BCC'];
+let MODEL_IDS = []; // DB ids
+
+// DATA: { [year]: { [YYYYMM]: { [DD]: {parts,defects,modelDefects,topDef,peak,images,_id} } } }
+let DATA = {};
+let currentView = null;
+let openYears = {};
+let openMonths = {};
+let charts = {};
+let editingDay = null;
+let realtimeSub = null;
+
+function isValidMK(mk){ return typeof mk==='string' && /^\d{6}$/.test(mk); }
+function getSortedYears(){ return Object.keys(DATA).sort((a,b)=>+a-+b); }
+function getSortedMonths(yr){ return Object.keys(DATA[yr]||{}).filter(isValidMK).sort(); }
+function getSortedDays(yr,mk){ return Object.keys(DATA[yr]?.[mk]||{}).sort((a,b)=>+a-+b); }
+function calcDayTotals(d){
+  const t=(d.parts||[]).reduce((a,b)=>a+b,0);
+  const df=(d.defects||[]).reduce((a,b)=>a+b,0);
+  return{total:t,totalDef:df,pct:t>0?+(df/t*100).toFixed(2):0};
+}
+function calcMonthSummary(yr,mk){
+  const parts=Array(MODELS.length).fill(0),defects=Array(MODELS.length).fill(0);
+  Object.values(DATA[yr][mk]).forEach(d=>{
+    (d.parts||[]).forEach((v,i)=>parts[i]+=(v||0));
+    (d.defects||[]).forEach((v,i)=>defects[i]+=(v||0));
+  });
+  const total=parts.reduce((a,b)=>a+b,0),totalDef=defects.reduce((a,b)=>a+b,0);
+  return{parts,defects,total,totalDef,pct:total>0?+(totalDef/total*100).toFixed(2):0};
+}
+
+// ══════════════════════════════════════════════════════
+// SYNC STATUS
+// ══════════════════════════════════════════════════════
+function setSyncStatus(state){ // 'ok' | 'syncing' | 'error'
+  const dot=document.getElementById('syncDot');
+  const lbl=document.getElementById('syncLabel');
+  if(!dot) return;
+  dot.className='sync-dot'+(state==='syncing'?' syncing':state==='error'?' error':'');
+  lbl.textContent=state==='syncing'?'กำลังบันทึก...':state==='error'?'ไม่ได้เชื่อมต่อ':'เชื่อมต่อแล้ว';
+}
+
+// ══════════════════════════════════════════════════════
+// SUPABASE: LOAD DATA
+// ══════════════════════════════════════════════════════
+async function loadAllData(){
+  try{
+    // Load models
+    const {data:mRows}=await sb.from('models').select('*').order('sort_order');
+    if(mRows && mRows.length){
+      MODELS=mRows.map(r=>r.name);
+      MODEL_COLORS=mRows.map(r=>r.color);
+      MODEL_IDS=mRows.map(r=>r.id);
+    }
+    // Load day_data
+    const {data:rows,error}=await sb.from('day_data').select('*').order('year').order('month_key').order('day_key');
+    if(error) throw error;
+    DATA={};
+    (rows||[]).forEach(row=>{
+      const yr=String(row.year), mk=row.month_key, dk=row.day_key;
+      if(!DATA[yr]) DATA[yr]={};
+      if(!DATA[yr][mk]) DATA[yr][mk]={};
+      const parts=Array.isArray(row.parts)?row.parts:[];
+      const defects=Array.isArray(row.defects)?row.defects:[];
+      while(parts.length<MODELS.length) parts.push(0);
+      while(defects.length<MODELS.length) defects.push(0);
+      DATA[yr][mk][dk]={parts,defects,modelDefects:row.model_defects||{},topDef:row.top_def||'',peak:!!row.is_peak,images:[],_id:row.id};
+    });
+    // Load images separately (base64 in day_images)
+    const {data:imgRows}=await sb.from('day_images').select('*').order('sort_order');
+    (imgRows||[]).forEach(r=>{
+      const yr=String(r.year),mk=r.month_key,dk=r.day_key;
+      if(DATA[yr]?.[mk]?.[dk]) DATA[yr][mk][dk].images.push({data:r.image_data,id:r.id});
+    });
+    setSyncStatus('ok');
+  } catch(e){
+    console.error('Load error:',e);
+    setSyncStatus('error');
+    showToast('⚠ โหลดข้อมูลไม่สำเร็จ: '+e.message);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// SUPABASE: SAVE / DELETE
+// ══════════════════════════════════════════════════════
+async function saveToSupabase(yr,mk,dk,dd){
+  setSyncStatus('syncing');
+  try{
+    const parts=dd.parts.slice();
+    const defects=dd.defects.slice();
+    const payload={year:+yr,month_key:mk,day_key:dk,parts,defects,model_defects:dd.modelDefects||{},top_def:dd.topDef||'',is_peak:!!dd.peak,updated_at:new Date().toISOString()};
+    if(dd._id){
+      await sb.from('day_data').update(payload).eq('id',dd._id);
+    } else {
+      const {data:ins}=await sb.from('day_data').insert(payload).select().single();
+      if(ins) DATA[yr][mk][dk]._id=ins.id;
+    }
+    setSyncStatus('ok');
+  } catch(e){ setSyncStatus('error'); showToast('⚠ บันทึกไม่สำเร็จ: '+e.message); }
+}
+
+async function deleteFromSupabase(yr,mk,dk){
+  setSyncStatus('syncing');
+  try{
+    const id=DATA[yr]?.[mk]?.[dk]?._id;
+    if(id){ await sb.from('day_data').delete().eq('id',id); }
+    await sb.from('day_images').delete().eq('year',+yr).eq('month_key',mk).eq('day_key',dk);
+    setSyncStatus('ok');
+  } catch(e){ setSyncStatus('error'); showToast('⚠ ลบไม่สำเร็จ: '+e.message); }
+}
+
+async function saveModelsToSupabase(){
+  setSyncStatus('syncing');
+  try{
+    await sb.from('models').delete().neq('id',0);
+    const rows=MODELS.map((name,i)=>({name,color:MODEL_COLORS[i],sort_order:i}));
+    const {data}=await sb.from('models').insert(rows).select();
+    if(data){ MODEL_IDS=data.map(r=>r.id); }
+    setSyncStatus('ok');
+  } catch(e){ setSyncStatus('error'); showToast('⚠ บันทึก Models ไม่สำเร็จ'); }
+}
+
+async function saveImageToSupabase(yr,mk,dk,base64){
+  setSyncStatus('syncing');
+  try{
+    const existingImgs=DATA[yr][mk][dk].images||[];
+    const sortOrder=existingImgs.length;
+    const {data}=await sb.from('day_images').insert({year:+yr,month_key:mk,day_key:dk,image_data:base64,sort_order:sortOrder}).select().single();
+    setSyncStatus('ok');
+    return data?.id;
+  } catch(e){ setSyncStatus('error'); showToast('⚠ อัปโหลดรูปไม่สำเร็จ: '+e.message); return null; }
+}
+
+async function deleteImageFromSupabase(imgId){
+  if(!imgId) return;
+  try{ await sb.from('day_images').delete().eq('id',imgId); } catch(e){}
+}
+
+// ══════════════════════════════════════════════════════
+// REALTIME
+// ══════════════════════════════════════════════════════
+function subscribeRealtime(){
+  realtimeSub=sb.channel('qgate-changes')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'day_data'},handleRealtimeInsert)
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'day_data'},handleRealtimeUpdate)
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'day_data'},handleRealtimeDelete)
+    .subscribe();
+}
+
+function handleRealtimeInsert(payload){
+  const r=payload.new;
+  const yr=String(r.year),mk=r.month_key,dk=r.day_key;
+  if(!DATA[yr]) DATA[yr]={};
+  if(!DATA[yr][mk]) DATA[yr][mk]={};
+  if(!DATA[yr][mk][dk]){ // only if it wasn't us who saved it
+    const parts=Array.isArray(r.parts)?r.parts:[];
+    const defects=Array.isArray(r.defects)?r.defects:[];
+    while(parts.length<MODELS.length) parts.push(0);
+    while(defects.length<MODELS.length) defects.push(0);
+    DATA[yr][mk][dk]={parts,defects,modelDefects:r.model_defects||{},topDef:r.top_def||'',peak:!!r.is_peak,images:[],_id:r.id};
+    renderSidebar();
+    showToast('🔄 มีข้อมูลใหม่จากผู้ใช้อื่น');
+  }
+}
+function handleRealtimeUpdate(payload){
+  const r=payload.new;
+  const yr=String(r.year),mk=r.month_key,dk=r.day_key;
+  if(DATA[yr]?.[mk]?.[dk]){
+    const parts=Array.isArray(r.parts)?r.parts:[];
+    const defects=Array.isArray(r.defects)?r.defects:[];
+    while(parts.length<MODELS.length) parts.push(0);
+    while(defects.length<MODELS.length) defects.push(0);
+    const existImgs=DATA[yr][mk][dk].images||[];
+    DATA[yr][mk][dk]={parts,defects,modelDefects:r.model_defects||{},topDef:r.top_def||'',peak:!!r.is_peak,images:existImgs,_id:r.id};
+    renderSidebar();
+    if(currentView?.type==='day'&&String(currentView.year)===yr&&currentView.month===mk&&currentView.day===dk){
+      renderDayView(yr,mk,dk);
+      showToast('🔄 ข้อมูลถูกอัปเดตโดยผู้ใช้อื่น');
+    }
+  }
+}
+function handleRealtimeDelete(payload){
+  const r=payload.old;
+  const yr=String(r.year),mk=r.month_key,dk=r.day_key;
+  if(DATA[yr]?.[mk]?.[dk]){
+    delete DATA[yr][mk][dk];
+    if(!Object.keys(DATA[yr][mk]).length) delete DATA[yr][mk];
+    if(!Object.keys(DATA[yr]||{}).length) delete DATA[yr];
+    renderSidebar();
+    showToast('🔄 ข้อมูลถูกลบโดยผู้ใช้อื่น');
+    if(currentView?.type==='day'&&String(currentView.year)===yr&&currentView.month===mk&&currentView.day===dk) showWelcome();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// SIDEBAR
+// ══════════════════════════════════════════════════════
+function renderSidebar(){
+  const years=getSortedYears();
+  let h='';
+  years.forEach(yr=>{
+    const months=getSortedMonths(yr);
+    const isYrOpen=!!openYears[yr];
+    const totalDays=months.reduce((a,mk)=>a+Object.keys(DATA[yr][mk]).length,0);
+    h+=`<div class="tree-year">
+      <div class="tree-year-header ${isYrOpen?'open':''}" onclick="toggleYear('${yr}')">
+        <span class="tree-year-icon ${isYrOpen?'open':''}">▶</span>
+        <span>📁 ${yr}</span>
+        <span class="tree-year-badge">${totalDays} วัน</span>
+      </div>
+      <div class="tree-months ${isYrOpen?'open':''}">`;
+    months.forEach(mk=>{
+      const mNum=parseInt(mk.slice(4));
+      const mLabel=MONTH_NAMES_TH[mNum]||mk;
+      const isMonthOpen=!!openMonths[yr+'_'+mk];
+      const days=getSortedDays(yr,mk);
+      h+=`<div class="tree-month">
+        <div class="tree-month-header ${isMonthOpen?'open':''}" onclick="toggleMonth('${yr}','${mk}')">
+          <span class="tree-month-icon ${isMonthOpen?'open':''}">▶</span>
+          <span>📂 ${mLabel}</span>
+          <span style="margin-left:auto;font-size:10px;color:var(--text3)">${days.length}d</span>
+          <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:0 4px;" onclick="event.stopPropagation();openAddDayFor('${yr}','${mk}')">＋</button>
+        </div>
+        <div class="tree-days ${isMonthOpen?'open':''}">`;
+      days.forEach(dk=>{
+        const dd=DATA[yr][mk][dk];
+        const {pct}=calcDayTotals(dd);
+        const isActive=currentView?.type==='day'&&String(currentView.year)===yr&&currentView.month===mk&&currentView.day===dk;
+        const col=pct>=3?'var(--red)':pct>=1.5?'var(--amber)':'var(--green)';
+        h+=`<div class="tree-day ${isActive?'active':''}" onclick="viewDay('${yr}','${mk}','${dk}')">
+          <span>${parseInt(dk)} ${MONTH_SHORT_TH[mNum]||''}</span>
+          ${dd.peak?'<span class="tree-day-peak">⚠</span>':''}
+          <span class="tree-day-pct" style="color:${col}">${pct.toFixed(1)}%</span>
+        </div>`;
+      });
+      h+=`</div></div>`;
+    });
+    h+=`<div style="padding:4px 12px 2px 24px;">
+      <button class="btn-topbar btn-sm" style="font-size:11px;padding:3px 8px;width:100%;justify-content:center;" onclick="openAddMonthFor('${yr}')">+ เดือน</button>
+    </div>`;
+    h+=`</div></div>`;
+  });
+  document.getElementById('sidebarTree').innerHTML=h;
+}
+function toggleYear(yr){openYears[yr]=!openYears[yr];if(openYears[yr]){const m=getSortedMonths(yr);if(m.length)openMonths[yr+'_'+m[0]]=true;}renderSidebar();}
+function toggleMonth(yr,mk){openMonths[yr+'_'+mk]=!openMonths[yr+'_'+mk];renderSidebar();}
+window.toggleYear=toggleYear; window.toggleMonth=toggleMonth;
+
+// ══════════════════════════════════════════════════════
+// VIEWS
+// ══════════════════════════════════════════════════════
+function viewDay(yr,mk,dk){ currentView={type:'day',year:yr,month:mk,day:dk}; renderSidebar(); renderDayView(yr,mk,dk); }
+
+function renderDayView(yr,mk,dk){
+  destroyCharts();
+  const dd=DATA[yr][mk][dk];
+  const {total,totalDef,pct}=calcDayTotals(dd);
+  const mNum=parseInt(mk.slice(4));
+  const dateLabel=`${parseInt(dk)} ${MONTH_NAMES_TH[mNum]} ${yr}`;
+  const pc=pct>=3?'var(--red)':pct>=1.5?'var(--amber)':'var(--green)';
+  const maxIdx=dd.defects.indexOf(Math.max(...dd.defects));
+  const imgs=dd.images||[];
+  let imgsHtml=imgs.map((img,i)=>`
+    <div class="img-thumb" onclick="openLightbox('${yr}','${mk}','${dk}',${i})">
+      <img src="${img.data||img}" alt="defect ${i+1}">
+      <button class="img-thumb-del" onclick="event.stopPropagation();deleteImage('${yr}','${mk}','${dk}',${i})">✕</button>
+    </div>`).join('');
+  imgsHtml+=`<label class="img-add-btn" for="imgUpload_${dk}"><span class="img-add-icon">📎</span><span>แนบรูป</span></label>
+  <input type="file" id="imgUpload_${dk}" accept="image/*" multiple style="display:none" onchange="handleImageUpload(event,'${yr}','${mk}','${dk}')">`;
+  let tableRows=MODELS.map((m,i)=>{
+    const p=dd.parts[i]||0,df=dd.defects[i]||0;
+    const mpct=p>0?(df/p*100).toFixed(2):null;
+    const bd=dd.modelDefects?.[m];
+    const hasBd=bd&&Object.keys(bd).length>0;
+    const rowId=`row_${yr}_${mk}_${dk}_${i}`;
+    let chips='';
+    if(hasBd) chips=`<tr id="chips_${rowId}" style="display:none"><td colspan="6" style="padding:0"><div class="chips-row">${makeChips(bd)}</div></td></tr>`;
+    return `<tr>
+      <td><span class="model-dot" style="background:${MODEL_COLORS[i]}"></span> ${m}</td>
+      <td class="mono">${p>0?p.toLocaleString():'—'}</td>
+      <td class="mono ${df>0?'red':''}">${p>0?df:'—'}</td>
+      <td class="mono">${mpct!==null?mpct+'%':'—'}</td>
+      <td>${mpct!==null?badgeHtml(mpct):'—'}</td>
+      <td>${hasBd?`<button class="expand-btn" onclick="toggleChips('chips_${rowId}',this)">▾ รายละเอียด</button>`:''}</td>
+    </tr>${chips}`;
+  }).join('');
+  document.getElementById('mainContent').innerHTML=`
+  <div class="main-header">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div class="main-title">${dateLabel}</div>
+        ${dd.peak?'<span class="peak-badge">⚠ Peak</span>':''}
+      </div>
+      <div class="main-sub">${dd.topDef||''}</div>
+    </div>
+    <div class="main-actions">
+      <button class="btn btn-ghost" onclick="openEditDay('${yr}','${mk}','${dk}')">✏ แก้ไข</button>
+      <button class="btn btn-danger" onclick="confirmDeleteDay('${yr}','${mk}','${dk}')">🗑 ลบ</button>
+    </div>
+  </div>
+  <div class="content">
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-icon">📦</div><div class="metric-label">ชิ้นงาน</div><div class="metric-value" style="color:var(--blue)">${total.toLocaleString()}</div><div class="metric-sub">ชิ้นที่ตรวจสอบ</div></div>
+      <div class="metric"><div class="metric-icon">⚠️</div><div class="metric-label">Defect</div><div class="metric-value" style="color:var(--red)">${totalDef}</div><div class="metric-sub">ชิ้นที่พบปัญหา</div></div>
+      <div class="metric"><div class="metric-icon">📊</div><div class="metric-label">% Defect</div><div class="metric-value" style="color:${pc}">${pct.toFixed(2)}%</div><div class="metric-sub">เกณฑ์: &lt;1.5% ปกติ</div></div>
+      <div class="metric"><div class="metric-icon">🏆</div><div class="metric-label">โมเดลปัญหามากสุด</div><div class="metric-value" style="font-size:15px;color:var(--purple);margin-top:4px;">${maxIdx>=0&&dd.defects[maxIdx]>0?MODELS[maxIdx]:'—'}</div><div class="metric-sub">${maxIdx>=0&&dd.defects[maxIdx]>0?dd.defects[maxIdx]+' defect':''}</div></div>
+    </div>
+    <div class="charts-row">
+      <div class="card"><div class="card-title">Defect ตามโมเดล</div><div class="card-sub">${dateLabel}</div><div style="position:relative;height:220px;margin-top:12px;"><canvas id="chartBar"></canvas></div></div>
+      <div class="card"><div class="card-title">สัดส่วน Defect</div><div style="position:relative;height:240px;margin-top:12px;"><canvas id="chartDoughnut"></canvas></div></div>
+    </div>
+    <div class="card"><div class="card-title">รายละเอียดตาม Model</div>
+      <div class="table-wrap"><table class="def-table">
+        <thead><tr><th>Model</th><th>ชิ้นงาน</th><th>Defect</th><th>%</th><th>ระดับ</th><th>รายละเอียด</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+      <div class="table-footer"><div>รวมทั้งหมด</div><div class="mono">${total.toLocaleString()}</div><div class="mono red">${totalDef}</div><div class="mono">${pct}%</div><div>${badgeHtml(pct)}</div><div></div></div>
+      </div>
+    </div>
+    <div class="images-section">
+      <div class="images-section-title">📎 รูปภาพ Defect (${imgs.length} รูป)</div>
+      <div class="images-grid" id="imagesGrid_${dk}">${imgsHtml}</div>
+    </div>
+  </div>`;
+  const gc='rgba(255,255,255,0.05)',tf={family:'Space Grotesk',size:11};
+  charts.bar=new Chart(document.getElementById('chartBar'),{type:'bar',data:{labels:MODELS,datasets:[{data:dd.defects,backgroundColor:MODEL_COLORS,borderRadius:4,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{family:'Space Grotesk',size:10},color:'#555C75',maxRotation:35,autoSkip:false},grid:{display:false},border:{color:gc}},y:{beginAtZero:true,ticks:{font:tf,color:'#555C75'},grid:{color:gc},border:{display:false}}}}});
+  const doughData=dd.defects.map((v,i)=>({v,c:MODEL_COLORS[i],l:MODELS[i]})).filter(x=>x.v>0);
+  if(doughData.length) charts.doughnut=new Chart(document.getElementById('chartDoughnut'),{type:'doughnut',data:{labels:doughData.map(x=>x.l),datasets:[{data:doughData.map(x=>x.v),backgroundColor:doughData.map(x=>x.c),borderWidth:2,borderColor:'#13161E'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'right',labels:{color:'#8B91A8',font:{family:'Space Grotesk',size:11},boxWidth:12}}}}});
+}
+
+function renderMonthView(yr,mk){
+  destroyCharts(); currentView={type:'month',year:yr,month:mk}; renderSidebar();
+  const mNum=parseInt(mk.slice(4)),mLabel=`${MONTH_NAMES_TH[mNum]} ${yr}`,days=getSortedDays(yr,mk),summary=calcMonthSummary(yr,mk);
+  const pc=summary.pct>=3?'var(--red)':summary.pct>=1.5?'var(--amber)':'var(--green)';
+  const dayCards=days.map(dk=>{const dd=DATA[yr][mk][dk];const{totalDef,pct}=calcDayTotals(dd);const col=pct>=3?'var(--red)':pct>=1.5?'var(--amber)':'var(--green)';return`<div class="day-card" onclick="viewDay('${yr}','${mk}','${dk}')"><div class="day-card-date">${parseInt(dk)} ${MONTH_SHORT_TH[mNum]}</div><div class="day-card-pct" style="color:${col}">${pct.toFixed(2)}%</div><div class="day-card-def">${totalDef} defects</div>${dd.peak?'<div class="day-card-peak">⚠ Peak</div>':''}</div>`;}).join('');
+  const lineLabels=days.map(dk=>parseInt(dk)+' '+MONTH_SHORT_TH[mNum]);
+  const lineData=days.map(dk=>calcDayTotals(DATA[yr][mk][dk]).pct);
+  const linePtColors=lineData.map(p=>p>=3?'#FF4D6A':p>=1.5?'#FFB547':'#3DDB8A');
+  document.getElementById('mainContent').innerHTML=`
+  <div class="main-header"><div><div class="main-title">${mLabel}</div><div class="main-sub">${days.length} วันทำการ · ${summary.total.toLocaleString()} ชิ้น · ${summary.totalDef} defects</div></div>
+    <div class="main-actions"><button class="btn btn-primary" onclick="openAddDayFor('${yr}','${mk}')">＋ เพิ่มวัน</button><button class="btn btn-danger" onclick="confirmDeleteMonth('${yr}','${mk}')">🗑 ลบเดือน</button></div>
+  </div>
+  <div class="content">
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-icon">📦</div><div class="metric-label">ชิ้นงานรวม</div><div class="metric-value" style="color:var(--blue)">${summary.total.toLocaleString()}</div></div>
+      <div class="metric"><div class="metric-icon">⚠️</div><div class="metric-label">Defect รวม</div><div class="metric-value" style="color:var(--red)">${summary.totalDef}</div></div>
+      <div class="metric"><div class="metric-icon">📊</div><div class="metric-label">% Defect</div><div class="metric-value" style="color:${pc}">${summary.pct.toFixed(2)}%</div></div>
+      <div class="metric"><div class="metric-icon">📅</div><div class="metric-label">วันทำการ</div><div class="metric-value" style="color:var(--cyan)">${days.length}</div></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;"><div class="card-title">% Defect รายวัน — ${mLabel}</div><div style="position:relative;height:180px;margin-top:12px;"><canvas id="chartLine"></canvas></div></div>
+    <div class="card" style="margin-bottom:12px;"><div class="card-title">วันทำการในเดือน</div><div class="month-overview-grid" style="margin-top:12px;">${dayCards}</div></div>
+  </div>`;
+  const gc='rgba(255,255,255,0.05)',tf={family:'Space Grotesk',size:11};
+  if(lineLabels.length) charts.line=new Chart(document.getElementById('chartLine'),{type:'line',data:{labels:lineLabels,datasets:[{label:'% Defect',data:lineData,borderColor:'#00E5CC',backgroundColor:'rgba(0,229,204,0.07)',pointBackgroundColor:linePtColors,pointBorderColor:'#0D0F14',pointBorderWidth:2,pointRadius:5,tension:0.4,fill:true,borderWidth:2.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},border:{color:gc},ticks:{font:tf,color:'#555C75',maxRotation:35}},y:{beginAtZero:true,border:{display:false},ticks:{callback:v=>v.toFixed(1)+'%',font:tf,color:'#555C75'},grid:{color:gc}}}}});
+}
+
+function renderYearView(yr){
+  destroyCharts(); currentView={type:'year',year:yr}; renderSidebar();
+  const months=getSortedMonths(yr);
+  let ytotal=0,ydef=0;
+  months.forEach(mk=>{const s=calcMonthSummary(yr,mk);ytotal+=s.total;ydef+=s.totalDef;});
+  const ypct=ytotal>0?(ydef/ytotal*100).toFixed(2):0;
+  const monthCards=months.map(mk=>{const mNum=parseInt(mk.slice(4));const s=calcMonthSummary(yr,mk);const days=getSortedDays(yr,mk);const pc=s.pct>=3?'var(--red)':s.pct>=1.5?'var(--amber)':'var(--green)';return`<div class="month-summary-card" onclick="renderMonthView('${yr}','${mk}');openMonths['${yr}_${mk}']=true;renderSidebar()"><div class="mscard-month">${MONTH_NAMES_TH[mNum]} ${yr}</div><div class="mscard-pct" style="color:${pc}">${s.pct.toFixed(2)}%</div><div class="mscard-meta">${s.total.toLocaleString()} ชิ้น · ${s.totalDef} def · ${days.length} วัน</div></div>`;}).join('');
+  document.getElementById('mainContent').innerHTML=`
+  <div class="main-header"><div><div class="main-title">📁 ${yr}</div><div class="main-sub">${months.length} เดือน · ${ytotal.toLocaleString()} ชิ้น · ${ydef} defects</div></div>
+    <div class="main-actions"><button class="btn btn-primary" onclick="openAddMonthFor('${yr}')">＋ เพิ่มเดือน</button><button class="btn btn-danger" onclick="confirmDeleteYear('${yr}')">🗑 ลบปี</button></div>
+  </div>
+  <div class="content">
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-icon">📦</div><div class="metric-label">ชิ้นงานรวมปี</div><div class="metric-value" style="color:var(--blue)">${ytotal.toLocaleString()}</div></div>
+      <div class="metric"><div class="metric-icon">⚠️</div><div class="metric-label">Defect รวมปี</div><div class="metric-value" style="color:var(--red)">${ydef}</div></div>
+      <div class="metric"><div class="metric-icon">📊</div><div class="metric-label">% Defect รวม</div><div class="metric-value" style="color:${ypct>=3?'var(--red)':ypct>=1.5?'var(--amber)':'var(--green)'}">${ypct}%</div></div>
+      <div class="metric"><div class="metric-icon">📅</div><div class="metric-label">จำนวนเดือน</div><div class="metric-value" style="color:var(--cyan)">${months.length}</div></div>
+    </div>
+    <div class="card"><div class="card-title">สรุปรายเดือน — ${yr}</div><div class="year-summary-grid" style="margin-top:12px;">${monthCards}</div></div>
+  </div>`;
+}
+function destroyCharts(){Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};}
+
+// ══════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════
+function badgeHtml(pct){const p=parseFloat(pct);if(!p)return'<span class="badge badge-zero">0%</span>';if(p>=5)return'<span class="badge badge-high">สูง</span>';if(p>=1)return'<span class="badge badge-med">กลาง</span>';return'<span class="badge badge-low">ต่ำ</span>';}
+function makeChips(bd){if(!bd)return'';return Object.entries(bd).sort((a,b)=>b[1]-a[1]).map(([k,v])=>{const cls=v>=10?'chip-sev1':v>=4?'chip-sev2':'chip-sev3';return`<span class="chip ${cls}">${k}<span class="chip-cnt">${v}</span></span>`;}).join('');}
+window.toggleChips=function(id,btn){const el=document.getElementById(id);if(!el)return;const vis=el.style.display!=='none';el.style.display=vis?'none':'table-row';btn.textContent=vis?'▾ รายละเอียด':'▴ ซ่อน';};
+
+// ══════════════════════════════════════════════════════
+// MODAL
+// ══════════════════════════════════════════════════════
+function openModal(id){document.getElementById('modalOverlay').style.display='flex';document.getElementById(id).style.display='block';}
+function closeModal(id){document.getElementById(id).style.display='none';const anyOpen=['modalDay','modalYear','modalMonth','modalModels','modalConfirm'].some(m=>document.getElementById(m).style.display==='block');if(!anyOpen)document.getElementById('modalOverlay').style.display='none';}
+function closeModalOnOverlay(e){if(e.target.id==='modalOverlay')['modalDay','modalYear','modalMonth','modalModels','modalConfirm'].forEach(closeModal);}
+window.closeModal=closeModal; window.closeModalOnOverlay=closeModalOnOverlay;
+
+// ══════════════════════════════════════════════════════
+// ADD / EDIT DAY
+// ══════════════════════════════════════════════════════
+function openAddDay(){editingDay=null;document.getElementById('modalDayTitle').textContent='เพิ่มข้อมูลวัน';populateDayYearSelect('dYear');populateDayMonthSelect();document.getElementById('dDay').value='';document.getElementById('dPeak').value='0';document.getElementById('dTopDef').value='';buildPartsInputs(null,null);openModal('modalDay');}
+function openAddDayFor(yr,mk){editingDay=null;document.getElementById('modalDayTitle').textContent='เพิ่มข้อมูลวัน';populateDayYearSelect('dYear',yr);populateDayMonthSelect(yr,mk);document.getElementById('dDay').value='';document.getElementById('dPeak').value='0';document.getElementById('dTopDef').value='';buildPartsInputs(null,null);openModal('modalDay');}
+function openEditDay(yr,mk,dk){editingDay={yr,mk,dk};const dd=DATA[yr][mk][dk];document.getElementById('modalDayTitle').textContent=`แก้ไข — ${parseInt(dk)} ${MONTH_NAMES_TH[parseInt(mk.slice(4))]} ${yr}`;populateDayYearSelect('dYear',yr);populateDayMonthSelect(yr,mk);document.getElementById('dDay').value=parseInt(dk);document.getElementById('dPeak').value=dd.peak?'1':'0';document.getElementById('dTopDef').value=dd.topDef||'';buildPartsInputs(dd.parts,dd.defects,dd.modelDefects);openModal('modalDay');}
+window.openEditDay=openEditDay;
+
+function populateDayYearSelect(selId,selectedYr){
+  const sel=document.getElementById(selId);
+  const years=getSortedYears();
+  if(!years.length) years.push(new Date().getFullYear());
+  sel.innerHTML=years.map(y=>`<option value="${y}" ${y==selectedYr?'selected':''}>${y}</option>`).join('');
+  sel.onchange=()=>populateDayMonthSelect(sel.value);
+}
+function populateDayMonthSelect(yr,selectedMk){
+  yr=yr||document.getElementById('dYear').value;
+  const sel=document.getElementById('dMonth');
+  const months=getSortedMonths(yr);
+  if(!months.length){sel.innerHTML='<option value="">— ยังไม่มีเดือน (กด + เดือน) —</option>';return;}
+  sel.innerHTML=months.map(mk=>{const mNum=parseInt(mk.slice(4));return`<option value="${mk}" ${mk===selectedMk?'selected':''}>${MONTH_NAMES_TH[mNum]||mk} ${yr}</option>`;}).join('');
+}
+function buildPartsInputs(parts,defects,modelDefects){
+  document.getElementById('partsInputs').innerHTML=MODELS.map((m,i)=>`<div style="display:flex;gap:6px;align-items:center;"><span style="width:130px;font-size:12px;color:var(--text2);flex-shrink:0;display:flex;align-items:center;gap:5px;"><span class="model-dot" style="background:${MODEL_COLORS[i]}"></span>${m}</span><input type="number" min="0" id="p_${i}" value="${parts?parts[i]||0:0}" style="width:90px;"></div>`).join('');
+  document.getElementById('defectsInputs').innerHTML=MODELS.map((m,i)=>`<div style="display:flex;gap:6px;align-items:center;"><span style="width:130px;font-size:12px;color:var(--text2);flex-shrink:0;display:flex;align-items:center;gap:5px;"><span class="model-dot" style="background:${MODEL_COLORS[i]}"></span>${m}</span><input type="number" min="0" id="d_${i}" value="${defects?defects[i]||0:0}" style="width:90px;"></div>`).join('');
+  document.getElementById('defBreakdownEditor').innerHTML=MODELS.map((m,i)=>{
+    const bd=modelDefects?.[m]||{};
+    const chips=Object.entries(bd).map(([k,v])=>`<div class="defect-editor-row" id="bdr_${i}_${k.replace(/[^a-z0-9]/gi,'_')}"><input value="${k}" readonly style="background:var(--bg4);"><input type="number" min="0" class="cnt-input" value="${v}" id="bdv_${i}_${k.replace(/[^a-z0-9]/gi,'_')}"><button class="btn btn-danger btn-sm" onclick="this.closest('.defect-editor-row').remove()">✕</button></div>`).join('');
+    return`<div class="defect-editor" id="bde_${i}" style="margin-bottom:8px;"><div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;display:flex;align-items:center;gap:6px;"><span class="model-dot" style="background:${MODEL_COLORS[i]}"></span>${m}</div><div id="bdchips_${i}">${chips}</div><div class="def-add-row"><input type="text" placeholder="ชื่อ Defect" id="bdn_${i}"><input type="number" min="1" value="1" id="bdnv_${i}" style="width:70px;"><button class="btn btn-primary btn-sm" onclick="addDefectRow(${i})">＋</button></div></div>`;
+  }).join('');
+}
+function addDefectRow(i){const name=document.getElementById('bdn_'+i).value.trim();const val=parseInt(document.getElementById('bdnv_'+i).value)||1;if(!name)return;const key=name.replace(/[^a-z0-9]/gi,'_');document.getElementById('bdchips_'+i).insertAdjacentHTML('beforeend',`<div class="defect-editor-row" id="bdr_${i}_${key}"><input value="${name}" readonly style="background:var(--bg4);"><input type="number" min="0" class="cnt-input" value="${val}" id="bdv_${i}_${key}"><button class="btn btn-danger btn-sm" onclick="this.closest('.defect-editor-row').remove()">✕</button></div>`);document.getElementById('bdn_'+i).value='';document.getElementById('bdnv_'+i).value='1';}
+window.addDefectRow=addDefectRow;
+
+async function saveDay(){
+  const yr=document.getElementById('dYear').value;
+  const mk=document.getElementById('dMonth').value;
+  const dayVal=parseInt(document.getElementById('dDay').value);
+  if(!yr||!mk||!dayVal||isNaN(dayVal)){showToast('⚠ กรุณากรอกข้อมูลให้ครบ');return;}
+  const dk=String(dayVal).padStart(2,'0');
+  const parts=MODELS.map((_,i)=>parseInt(document.getElementById('p_'+i)?.value)||0);
+  const defects=MODELS.map((_,i)=>parseInt(document.getElementById('d_'+i)?.value)||0);
+  const modelDefects={};
+  MODELS.forEach((m,i)=>{const bd={};document.querySelectorAll(`#bdchips_${i} .defect-editor-row`).forEach(row=>{const nEl=row.querySelector('input[readonly]');const vEl=row.querySelector('.cnt-input');if(nEl&&vEl){const nm=nEl.value.trim(),vl=parseInt(vEl.value)||0;if(nm&&vl>0)bd[nm]=vl;}});if(Object.keys(bd).length)modelDefects[m]=bd;});
+  const peak=document.getElementById('dPeak').value==='1';
+  const topDef=document.getElementById('dTopDef').value;
+  if(editingDay&&(editingDay.yr!==yr||editingDay.mk!==mk||editingDay.dk!==dk)){
+    await deleteFromSupabase(editingDay.yr,editingDay.mk,editingDay.dk);
+    delete DATA[editingDay.yr][editingDay.mk][editingDay.dk];
+  }
+  if(!DATA[yr])DATA[yr]={};
+  if(!DATA[yr][mk])DATA[yr][mk]={};
+  const existImgs=editingDay?DATA[editingDay.yr]?.[editingDay.mk]?.[editingDay.dk]?.images||[]:[];
+  const existId=editingDay&&editingDay.yr===yr&&editingDay.mk===mk&&editingDay.dk===dk?DATA[yr][mk][dk]?._id:undefined;
+  DATA[yr][mk][dk]={parts,defects,modelDefects,topDef,peak,images:existImgs,_id:existId};
+  await saveToSupabase(yr,mk,dk,DATA[yr][mk][dk]);
+  closeModal('modalDay');
+  renderSidebar();
+  viewDay(yr,mk,dk);
+  showToast('✅ บันทึกแล้ว');
+}
+window.saveDay=saveDay; window.openAddDay=openAddDay; window.openAddDayFor=openAddDayFor;
+
+// ══════════════════════════════════════════════════════
+// YEAR/MONTH MANAGEMENT
+// ══════════════════════════════════════════════════════
+function openAddYear(){document.getElementById('newYearInput').value='';openModal('modalYear');}
+function saveYear(){const yr=parseInt(document.getElementById('newYearInput').value);if(!yr||yr<2000){showToast('⚠ ใส่ปีที่ถูกต้อง');return;}if(!DATA[yr])DATA[yr]={};openYears[yr]=true;closeModal('modalYear');renderSidebar();renderYearView(String(yr));showToast(`✅ เพิ่มปี ${yr} แล้ว`);}
+function openAddMonthFor(yr){const sel=document.getElementById('newMonthYear');sel.innerHTML=getSortedYears().map(y=>`<option value="${y}" ${y==yr?'selected':''}>${y}</option>`).join('');openModal('modalMonth');}
+function saveMonth(){const yr=document.getElementById('newMonthYear').value;const mo=document.getElementById('newMonthMonth').value;const mk=yr+mo;if(!DATA[yr])DATA[yr]={};if(!DATA[yr][mk])DATA[yr][mk]={};openYears[yr]=true;openMonths[yr+'_'+mk]=true;closeModal('modalMonth');renderSidebar();renderMonthView(yr,mk);showToast(`✅ เพิ่มเดือน ${MONTH_NAMES_TH[parseInt(mo)]} ${yr} แล้ว`);}
+window.openAddYear=openAddYear; window.saveYear=saveYear; window.openAddMonthFor=openAddMonthFor; window.saveMonth=saveMonth; window.renderMonthView=renderMonthView;
+
+// ══════════════════════════════════════════════════════
+// DELETE
+// ══════════════════════════════════════════════════════
+function confirmDeleteDay(yr,mk,dk){
+  document.getElementById('confirmTitle').textContent='ลบข้อมูลวัน';
+  document.getElementById('confirmMsg').textContent=`ต้องการลบข้อมูลวันที่ ${parseInt(dk)} ${MONTH_NAMES_TH[parseInt(mk.slice(4))]} ${yr} ใช่ไหม?`;
+  document.getElementById('confirmOkBtn').textContent='ลบ';
+  document.getElementById('confirmOkBtn').onclick=async()=>{
+    await deleteFromSupabase(yr,mk,dk);
+    delete DATA[yr][mk][dk];
+    if(!Object.keys(DATA[yr][mk]).length)delete DATA[yr][mk];
+    if(!Object.keys(DATA[yr]||{}).length)delete DATA[yr];
+    closeModal('modalConfirm');renderSidebar();
+    if(DATA[yr]?.[mk])renderMonthView(yr,mk);else if(DATA[yr])renderYearView(yr);else showWelcome();
+    showToast('🗑 ลบแล้ว');
+  };
+  openModal('modalConfirm');
+}
+function confirmDeleteMonth(yr,mk){
+  const mNum=parseInt(mk.slice(4));
+  document.getElementById('confirmTitle').textContent='ลบเดือน';
+  document.getElementById('confirmMsg').textContent=`ต้องการลบ ${MONTH_NAMES_TH[mNum]} ${yr} ทั้งหมดใช่ไหม?`;
+  document.getElementById('confirmOkBtn').textContent='ลบ';
+  document.getElementById('confirmOkBtn').onclick=async()=>{
+    const days=getSortedDays(yr,mk);
+    for(const dk of days) await deleteFromSupabase(yr,mk,dk);
+    delete DATA[yr][mk];
+    if(!Object.keys(DATA[yr]||{}).length)delete DATA[yr];
+    closeModal('modalConfirm');renderSidebar();
+    if(DATA[yr])renderYearView(yr);else showWelcome();
+    showToast('🗑 ลบเดือนแล้ว');
+  };
+  openModal('modalConfirm');
+}
+function confirmDeleteYear(yr){
+  document.getElementById('confirmTitle').textContent='ลบปี';
+  document.getElementById('confirmMsg').textContent=`ต้องการลบข้อมูลปี ${yr} ทั้งหมดใช่ไหม?`;
+  document.getElementById('confirmOkBtn').textContent='ลบ';
+  document.getElementById('confirmOkBtn').onclick=async()=>{
+    for(const mk of getSortedMonths(yr)) for(const dk of getSortedDays(yr,mk)) await deleteFromSupabase(yr,mk,dk);
+    delete DATA[yr];
+    closeModal('modalConfirm');renderSidebar();showWelcome();
+    showToast('🗑 ลบปีแล้ว');
+  };
+  openModal('modalConfirm');
+}
+window.confirmDeleteDay=confirmDeleteDay; window.confirmDeleteMonth=confirmDeleteMonth; window.confirmDeleteYear=confirmDeleteYear;
+
+function showWelcome(){currentView=null;document.getElementById('mainContent').innerHTML=`<div class="welcome" id="welcomeScreen"><div class="welcome-icon">📋</div><div style="font-size:16px;font-weight:600;color:var(--text2);">เลือกข้อมูลจากแถบซ้าย</div><div class="welcome-text">หรือกด <strong style="color:var(--cyan)">＋ เพิ่มข้อมูล</strong> เพื่อเริ่มต้น</div></div>`;}
+
+// ══════════════════════════════════════════════════════
+// MODELS
+// ══════════════════════════════════════════════════════
+function openModelManager(){renderModelList();openModal('modalModels');}
+function renderModelList(){document.getElementById('modelList').innerHTML=MODELS.map((m,i)=>`<div class="model-item"><span class="model-color-dot" style="background:${MODEL_COLORS[i]}"></span><span class="model-item-name">${m}</span><input type="color" value="${MODEL_COLORS[i]}" onchange="MODEL_COLORS[${i}]=this.value" style="width:30px;height:24px;padding:2px;border-radius:4px;border:1px solid var(--line2);background:var(--bg3);cursor:pointer;"><button class="model-item-del" onclick="deleteModel(${i})">✕</button></div>`).join('');}
+async function addModel(){const name=document.getElementById('newModelName').value.trim();const color=document.getElementById('newModelColor').value;if(!name)return;MODELS.push(name);MODEL_COLORS.push(color);await saveModelsToSupabase();renderModelList();document.getElementById('newModelName').value='';showToast(`✅ เพิ่ม Model "${name}" แล้ว`);}
+async function deleteModel(i){MODELS.splice(i,1);MODEL_COLORS.splice(i,1);await saveModelsToSupabase();renderModelList();}
+function refreshAll(){renderSidebar();if(currentView){if(currentView.type==='day')viewDay(currentView.year,currentView.month,currentView.day);else if(currentView.type==='month')renderMonthView(currentView.year,currentView.month);else renderYearView(currentView.year);}}
+window.openModelManager=openModelManager; w

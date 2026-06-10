@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Q-Gate Summary</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0D0F14;--bg2:#13161E;--bg3:#1A1E2A;--bg4:#222738;
+  --line:rgba(255,255,255,0.07);--line2:rgba(255,255,255,0.14);
+  --text:#F0F2F8;--text2:#8B91A8;--text3:#555C75;
+  --cyan:#00E5CC;--cyan-dim:rgba(0,229,204,0.12);
+  --red:#FF4D6A;--red-dim:rgba(255,77,106,0.15);
+  --amber:#FFB547;--amber-dim:rgba(255,181,71,0.15);
+  --green:#3DDB8A;--green-dim:rgba(61,219,138,0.12);
+  --blue:#5B9BF8;--purple:#C478F5;--r:10px;
+}
+body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;display:flex;flex-direction:column;}
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;height:52px;background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100;flex-shrink:0;}
+.logo-dot{width:9px;height:9px;border-radius:50%;background:var(--purple);box-shadow:0 0 8px rgba(196,120,245,.35);animation:pulse 2.4s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.topbar-left{display:flex;align-items:center;gap:10px;}
+.topbar-title{font-size:13px;font-weight:600;letter-spacing:.05em;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);}
+.sync-dot.syncing{background:var(--amber);animation:pulse 1s infinite;}
+.sync-dot.error{background:var(--red);}
+.topbar-right{display:flex;gap:8px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:7px;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .2s;}
+.btn-ghost{background:var(--bg3);color:var(--text2);border:1px solid var(--line2);}
+.btn-ghost:hover{background:var(--bg4);color:var(--text);}
+.btn-primary{background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(0,229,204,.3);}
+.btn-primary:hover{background:rgba(0,229,204,.2);}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:5px;}
+/* LAYOUT */
+.page{display:flex;flex:1;height:calc(100vh - 52px);overflow:hidden;}
+/* LEFT PANEL */
+.panel-left{width:300px;min-width:260px;background:var(--bg2);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden;}
+.panel-left-header{padding:1rem 1.25rem .75rem;border-bottom:1px solid var(--line);}
+.panel-left-title{font-size:13px;font-weight:700;}
+.panel-left-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+.mode-tabs{display:flex;gap:4px;padding:.75rem 1rem;border-bottom:1px solid var(--line);}
+.mode-tab{flex:1;text-align:center;padding:6px 4px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--bg3);color:var(--text3);transition:all .2s;}
+.mode-tab.active{background:var(--cyan-dim);color:var(--cyan);border-color:rgba(0,229,204,.3);}
+.panel-left-body{flex:1;overflow-y:auto;padding:.75rem .5rem;}
+.panel-left-body::-webkit-scrollbar{width:4px;}
+.panel-left-body::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px;}
+.panel-left-footer{padding:.75rem 1rem;border-top:1px solid var(--line);display:flex;gap:8px;}
+/* TREE */
+.year-label{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text2);transition:background .15s;}
+.year-label:hover{background:var(--bg3);}
+.year-icon{font-size:10px;transition:transform .2s;color:var(--text3);}
+.year-icon.open{transform:rotate(90deg);}
+.year-children{overflow:hidden;max-height:0;transition:max-height .25s ease;}
+.year-children.open{max-height:2000px;}
+.month-label{display:flex;align-items:center;gap:8px;padding:5px 8px 5px 22px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);transition:background .15s;}
+.month-label:hover{background:var(--bg3);}
+.month-children{overflow:hidden;max-height:0;transition:max-height .2s ease;}
+.month-children.open{max-height:1000px;}
+.day-item{display:flex;align-items:center;gap:8px;padding:4px 8px 4px 36px;border-radius:5px;cursor:pointer;font-size:11px;color:var(--text3);transition:all .15s;font-family:'JetBrains Mono',monospace;}
+.day-item:hover{background:var(--bg3);color:var(--text2);}
+.day-item.selected{background:var(--cyan-dim);color:var(--cyan);}
+.month-label.selected{color:var(--cyan);}
+.year-label.selected{color:var(--cyan);}
+.sel-count{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--cyan-dim);color:var(--cyan);padding:2px 7px;border-radius:4px;}
+/* RIGHT PANEL */
+.panel-right{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.panel-right::-webkit-scrollbar{width:6px;}
+.panel-right::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px;}
+.result-header{padding:1.25rem 1.5rem .75rem;border-bottom:1px solid var(--line);flex-shrink:0;}
+.result-title{font-size:18px;font-weight:700;letter-spacing:-.02em;}
+.result-sub{font-size:12px;color:var(--text3);margin-top:4px;}
+.result-body{padding:1.25rem 1.5rem;flex:1;}
+.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;text-align:center;color:var(--text3);}
+.welcome-icon{font-size:52px;opacity:.25;}
+/* METRICS */
+.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.25rem;}
+@media(max-width:900px){.metric-grid{grid-template-columns:repeat(2,1fr)}}
+.metric{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:1rem 1.25rem;position:relative;}
+.metric-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;}
+.metric-value{font-size:26px;font-weight:700;line-height:1;letter-spacing:-.03em;}
+.metric-sub{font-size:11px;color:var(--text3);margin-top:6px;}
+.metric-icon{position:absolute;top:1rem;right:1rem;font-size:18px;opacity:.4;}
+/* CARD */
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:1.25rem;margin-bottom:12px;}
+.card-title{font-size:12px;font-weight:700;margin-bottom:10px;}
+/* TABLE */
+.def-table{width:100%;border-collapse:collapse;}
+.def-table th{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;padding:7px 10px;border-bottom:1px solid var(--line2);white-space:nowrap;text-align:left;}
+.def-table td{padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;}
+.def-table tr:hover td{background:rgba(255,255,255,.02);}
+.mono{font-family:'JetBrains Mono',monospace;}
+.red{color:var(--red);}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;}
+.badge-high{background:var(--red-dim);color:var(--red);}
+.badge-med{background:var(--amber-dim);color:var(--amber);}
+.badge-low{background:var(--green-dim);color:var(--green);}
+.badge-zero{background:var(--bg3);color:var(--text3);}
+.model-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;}
+.table-footer{display:flex;padding:8px 10px;background:var(--bg3);font-weight:600;font-size:13px;border-radius:0 0 6px 6px;gap:0;}
+.table-footer>*{flex:1;}
+/* DEFECT BAR */
+.def-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+.def-bar-name{flex:1;font-size:13px;}
+.def-bar-track{width:140px;height:7px;background:var(--bg4);border-radius:4px;overflow:hidden;flex-shrink:0;}
+.def-bar-fill{height:100%;border-radius:4px;background:var(--red);}
+.def-bar-cnt{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--red);width:32px;text-align:right;flex-shrink:0;}
+.def-bar-pct{font-size:11px;color:var(--text3);width:38px;text-align:right;flex-shrink:0;}
+/* TREND */
+.trend-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px;}
+.trend-row:last-child{border:none;}
+.trend-date{color:var(--text2);font-family:'JetBrains Mono',monospace;width:110px;flex-shrink:0;}
+.trend-bar{flex:1;height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;}
+.trend-bar-fill{height:100%;border-radius:3px;}
+.trend-pct{font-family:'JetBrains Mono',monospace;font-size:11px;width:52px;text-align:right;flex-shrink:0;}
+/* LOADING */
+#loadingScreen{position:fixed;inset:0;background:var(--bg);z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+.loading-spinner{width:36px;height:36px;border:3px solid var(--bg4);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--bg3);border:1px solid var(--line2);color:var(--text);padding:10px 18px;border-radius:8px;font-size:13px;z-index:800;box-shadow:0 8px 32px rgba(0,0,0,.4);animation:tin .2s ease;}
+@keyframes tin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@media print{.topbar,.panel-left,.btn{display:none!important;}.page{display:block;}.panel-right{overflow:visible;}}
+</style>
+</head>
+<body>
+
+<div id="loadingScreen">
+  <div class="loading-spinner"></div>
+  <div style="font-size:13px;color:var(--text3);">กำลังโหลดข้อมูลจาก Supabase...</div>
+</div>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo-dot"></div>
+    <span class="topbar-title">🗂 Q-GATE SUMMARY</span>
+    <div class="sync-dot" id="syncDot"></div>
+    <span style="font-size:11px;color:var(--text3);" id="syncLabel">กำลังโหลด...</span>
+  </div>
+  <div class="topbar-right">
+    <a href="index.html" class="btn btn-ghost btn-sm">← กลับ Dashboard</a>
+    <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print/PDF</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearSelection()">✕ ล้าง</button>
+    <button class="btn btn-primary" onclick="buildSummary()">📊 สร้าง Summary</button>
+  </div>
+</div>
+
+<div class="page">
+  <!-- LEFT PANEL -->
+  <div class="panel-left">
+    <div class="panel-left-header">
+      <div class="panel-left-title">เลือกข้อมูลที่ต้องการสรุป</div>
+      <div class="panel-left-sub">เลือกข้ามปี ข้ามเดือน ข้ามวันได้</div>
+    </div>
+    <div class="mode-tabs">
+      <div class="mode-tab active" id="tabDay" onclick="setMode('day')">📅 รายวัน</div>
+      <div class="mode-tab" id="tabMonth" onclick="setMode('month')">📂 รายเดือน</div>
+      <div class="mode-tab" id="tabYear" onclick="setMode('year')">📁 รายปี</div>
+    </div>
+    <div class="panel-left-body" id="treeContainer">
+      <div style="color:var(--text3);padding:12px;font-size:12px;">กำลังโหลด...</div>
+    </div>
+    <div class="panel-left-footer">
+      <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;" onclick="selectAll()">เลือกทั้งหมด</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;" onclick="clearSelection()">ล้าง</button>
+      <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center;" onclick="buildSummary()">📊 สรุป</button>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel-right" id="panelRight">
+    <div class="welcome">
+      <div class="welcome-icon">📊</div>
+      <div style="font-size:16px;font-weight:600;color:var(--text2);">เลือกข้อมูลจากแถบซ้าย</div>
+      <div style="font-size:13px;color:var(--text3);">แล้วกด <strong style="color:var(--cyan)">📊 สร้าง Summary</strong></div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px;">เลือกข้ามปี ข้ามเดือน หรือข้ามวันได้</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// SUPABASE CONFIG (เดียวกับ index.html)
+// ══════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://rcmmfigunjlfrtcmioye.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_S27QAB2ZtE3jMyq0VyBw4Q_BHD0LnQK';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const MONTH_NAMES_TH = ['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const MONTH_SHORT_TH = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+let MODELS = [];
+let MODEL_COLORS = [];
+let DATA = {};
+let mode = 'day';
+let selected = new Set();
+let openNodes = {};
+let charts = {};
+
+function isValidMK(mk){ return typeof mk==='string'&&/^\d{6}$/.test(mk); }
+function getSortedYears(){ return Object.keys(DATA).sort((a,b)=>+a-+b); }
+function getSortedMonths(yr){ return Object.keys(DATA[yr]||{}).filter(isValidMK).sort(); }
+function getSortedDays(yr,mk){ return Object.keys(DATA[yr]?.[mk]||{}).sort((a,b)=>+a-+b); }
+function calcTotals(d){
+  const t=(d.parts||[]).reduce((a,b)=>a+b,0);
+  const df=(d.defects||[]).reduce((a,b)=>a+b,0);
+  return{total:t,totalDef:df,pct:t>0?+(df/t*100).toFixed(2):0};
+}
+function calcMonthSumm(yr,mk){
+  const parts=Array(MODELS.length).fill(0),defects=Array(MODELS.length).fill(0);
+  getSortedDays(yr,mk).forEach(dk=>{
+    const d=DATA[yr][mk][dk];
+    (d.parts||[]).forEach((v,i)=>parts[i]+=(v||0));
+    (d.defects||[]).forEach((v,i)=>defects[i]+=(v||0));
+  });
+  const total=parts.reduce((a,b)=>a+b,0),totalDef=defects.reduce((a,b)=>a+b,0);
+  return{total,totalDef,pct:total>0?+(totalDef/total*100).toFixed(2):0};
+}
+function setSyncStatus(s){
+  const d=document.getElementById('syncDot'),l=document.getElementById('syncLabel');
+  if(!d) return;
+  d.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');
+  l.textContent=s==='syncing'?'กำลังโหลด...':s==='error'?'ไม่ได้เชื่อมต่อ':'พร้อมใช้งาน';
+}
+
+// ══════════════════════════════════════════════════════
+// LOAD DATA FROM SUPABASE
+// ══════════════════════════════════════════════════════
+async function loadData(){
+  setSyncStatus('syncing');
+  try{
+    const {data:mRows}=await sb.from('models').select('*').order('sort_order');
+    if(mRows&&mRows.length){ MODELS=mRows.map(r=>r.name); MODEL_COLORS=mRows.map(r=>r.color); }
+    else{ MODELS=['Front Redback','Rear Redback','5F00','Front MY21','Sport Hoop','Brow Fascia','Grille Carrier','Rear Applique','SAIC']; MODEL_COLORS=['#5B9BF8','#3DDB8A','#FF4D6A','#C478F5','#FFB547','#00E5CC','#8B91A8','#F87C5B','#F85BCC']; }
+    const {data:rows,error}=await sb.from('day_data').select('*').order('year').order('month_key').order('day_key');
+    if(error) throw error;
+    DATA={};
+    (rows||[]).forEach(row=>{
+      const yr=String(row.year),mk=row.month_key,dk=row.day_key;
+      if(!DATA[yr])DATA[yr]={};
+      if(!DATA[yr][mk])DATA[yr][mk]={};
+      const parts=Array.isArray(row.parts)?row.parts:[];
+      const defects=Array.isArray(row.defects)?row.defects:[];
+      while(parts.length<MODELS.length)parts.push(0);
+      while(defects.length<MODELS.length)defects.push(0);
+      DATA[yr][mk][dk]={parts,defects,modelDefects:row.model_defects||{},topDef:row.top_def||'',peak:!!row.is_peak};
+    });
+    setSyncStatus('ok');
+  } catch(e){ setSyncStatus('error'); showToast('⚠ โหลดข้อมูลไม่สำเร็จ: '+e.message); }
+}
+
+// ══════════════════════════════════════════════════════
+// SELECTION
+// ══════════════════════════════════════════════════════
+function setMode(m){
+  mode=m; selected.clear();
+  ['day','month','year'].forEach(t=>document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active',t===m));
+  renderTree(); clearResult();
+}
+function clearSelection(){ selected.clear(); renderTree(); clearResult(); }
+function selectAll(){
+  selected.clear();
+  if(mode==='day') getSortedYears().forEach(yr=>getSortedMonths(yr).forEach(mk=>getSortedDays(yr,mk).forEach(dk=>selected.add(`${yr}|${mk}|${dk}`))));
+  else if(mode==='month') getSortedYears().forEach(yr=>getSortedMonths(yr).forEach(mk=>selected.add(`${yr}|${mk}`)));
+  else getSortedYears().forEach(yr=>selected.add(yr));
+  renderTree();
+}
+function toggleKey(key){ selected.has(key)?selected.delete(key):selected.add(key); renderTree(); }
+function toggleYearAll(yr){
+  const keys=[]; getSortedMonths(yr).forEach(mk=>getSortedDays(yr,mk).forEach(dk=>keys.push(`${yr}|${mk}|${dk}`)));
+  const allSel=keys.every(k=>selected.has(k)); keys.forEach(k=>allSel?selected.delete(k):selected.add(k)); renderTree();
+}
+function toggleMonthAll(yr,mk){
+  const keys=getSortedDays(yr,mk).map(dk=>`${yr}|${mk}|${dk}`);
+  const allSel=keys.every(k=>selected.has(k)); keys.forEach(k=>allSel?selected.delete(k):selected.add(k)); renderTree();
+}
+function toggleNode(key){ openNodes[key]=!openNodes[key]; renderTree(); }
+window.setMode=setMode; window.clearSelection=clearSelection; window.selectAll=selectAll;
+window.toggleKey=toggleKey; window.toggleYearAll=toggleYearAll; window.toggleMonthAll=toggleMonthAll; window.toggleNode=toggleNode;
+
+// ══════════════════════════════════════════════════════
+// TREE
+// ══════════════════════════════════════════════════════
+function renderTree(){
+  const years=getSortedYears();
+  if(!years.length){ document.getElementById('treeContainer').innerHTML='<div style="color:var(--text3);padding:12px;font-size:12px;">ยังไม่มีข้อมูล</div>'; return; }
+  let h='';
+  years.forEach(yr=>{
+    const months=getSortedMonths(yr);
+    const yrOpen=!!openNodes['yr_'+yr];
+    if(mode==='year'){
+      const sel=selected.has(yr);
+      let ytotal=0,ydef=0;
+      months.forEach(mk=>{const s=calcMonthSumm(yr,mk);ytotal+=s.total;ydef+=s.totalDef;});
+      const ypct=ytotal>0?(ydef/ytotal*100).toFixed(2):0;
+      const col=ypct>=3?'var(--red)':ypct>=1.5?'var(--amber)':'var(--green)';
+      h+=`<div style="margin-bottom:4px;"><label class="year-label ${sel?'selected':''}" style="cursor:pointer;" onclick="toggleKey('${yr}')">
+        <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleKey('${yr}')" style="accent-color:var(--cyan)">
+        <span>📁 ${yr}</span>
+        <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:12px;color:${col}">${ypct}%</span>
+      </label></div>`;
+      return;
+    }
+    const totalDays=months.reduce((a,mk)=>a+getSortedDays(yr,mk).length,0);
+    let yrSelCnt=0;
+    if(mode==='month') yrSelCnt=months.filter(mk=>selected.has(`${yr}|${mk}`)).length;
+    else months.forEach(mk=>getSortedDays(yr,mk).forEach(dk=>{if(selected.has(`${yr}|${mk}|${dk}`))yrSelCnt++;}));
+    h+=`<div style="margin-bottom:2px;">
+      <div class="year-label" onclick="toggleNode('yr_${yr}')">
+        <span class="year-icon ${yrOpen?'open':''}">▶</span>
+        <span>📁 ${yr}</span>
+        ${yrSelCnt>0?`<span class="sel-count">${yrSelCnt}</span>`:''}
+        <span style="margin-left:auto;font-size:10px;color:var(--text3)">${totalDays}d</span>
+        ${mode==='day'?`<button onclick="event.stopPropagation();toggleYearAll('${yr}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;padding:0 3px;" title="เลือกทั้งปี">☑</button>`:''}
+      </div>
+      <div class="year-children ${yrOpen?'open':''}">`;
+    months.forEach(mk=>{
+      const mNum=parseInt(mk.slice(4));
+      const mLabel=MONTH_NAMES_TH[mNum]||mk;
+      const mkOpen=!!openNodes['mk_'+yr+'_'+mk];
+      const days=getSortedDays(yr,mk);
+      if(mode==='month'){
+        const sel=selected.has(`${yr}|${mk}`);
+        const s=calcMonthSumm(yr,mk);
+        const col=s.pct>=3?'var(--red)':s.pct>=1.5?'var(--amber)':'var(--green)';
+        h+=`<label class="month-label ${sel?'selected':''}" onclick="toggleKey('${yr}|${mk}')">
+          <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleKey('${yr}|${mk}')" style="accent-color:var(--cyan)">
+          <span>📂 ${mLabel}</span>
+          <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:${col}">${s.pct.toFixed(2)}%</span>
+        </label>`;
+        return;
+      }
+      const mSelCnt=days.filter(dk=>selected.has(`${yr}|${mk}|${dk}`)).length;
+      h+=`<div>
+        <div class="month-label" onclick="toggleNode('mk_${yr}_${mk}')">
+          <span class="year-icon ${mkOpen?'open':''}" style="font-size:9px;">▶</span>
+          <span>📂 ${mLabel}</span>
+          ${mSelCnt>0?`<span class="sel-count">${mSelCnt}</span>`:''}
+          <span style="margin-left:auto;font-size:10px;color:var(--text3)">${days.length}d</span>
+          <button onclick="event.stopPropagation();toggleMonthAll('${yr}','${mk}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;padding:0 3px;">☑</button>
+        </div>
+        <div class="month-children ${mkOpen?'open':''}">`;
+      days.forEach(dk=>{
+        const dd=DATA[yr][mk][dk];
+        const {pct}=calcTotals(dd);
+        const key=`${yr}|${mk}|${dk}`;
+        const sel=selected.has(key);
+        const col=pct>=3?'var(--red)':pct>=1.5?'var(--amber)':'var(--green)';
+        h+=`<div class="day-item ${sel?'selected':''}" onclick="toggleKey('${key}')">
+          <input type="checkbox" ${sel?'checked':''} onclick="event.stopPropagation();toggleKey('${key}')" style="accent-color:var(--cyan)">
+          <span>${parseInt(dk)} ${MONTH_SHORT_TH[mNum]||''}</span>
+          ${dd.peak?'<span style="color:var(--red);font-size:9px;">⚠</span>':''}
+          <span style="margin-left:auto;color:${col};font-size:10px;">${pct.toFixed(1)}%</span>
+        </div>`;
+      });
+      h+=`</div></div>`;
+    });
+    h+=`</div></div>`;
+  });
+  const cnt=selected.size;
+  document.getElementById('treeContainer').innerHTML=h+(cnt>0?`<div style="padding:8px 10px;font-size:11px;color:var(--cyan);text-align:center;border-top:1px solid var(--line);margin-top:6px;">✓ เลือกแล้ว ${cnt} รายการ</div>`:'');
+}
+
+// ══════════════════════════════════════════════════════
+// BUILD SUMMARY
+// ══════════════════════════════════════════════════════
+function badgeHtml(pct){const p=parseFloat(pct);if(!p)return'<span class="badge badge-zero">0%</span>';if(p>=5)return'<span class="badge badge-high">สูง</span>';if(p>=1)return'<span class="badge badge-med">กลาง</span>';return'<span class="badge badge-low">ต่ำ</span>';}
+function clearResult(){
+  document.getElementById('panelRight').innerHTML=`<div class="welcome"><div class="welcome-icon">📊</div><div style="font-size:16px;font-weight:600;color:var(--text2);">เลือกข้อมูลจากแถบซ้าย</div><div style="font-size:13px;color:var(--text3);">แล้วกด <strong style="color:var(--cyan)">📊 สร้าง Summary</strong></div></div>`;
+  Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};
+}
+
+function buildSummary(){
+  if(!selected.size){showToast('⚠ เลือกข้อมูลก่อนนะครับ');return;}
+  const dayEntries=[],labels=[],selArr=[...selected].sort();
+  if(mode==='day'){
+    selArr.forEach(key=>{const [yr,mk,dk]=key.split('|');const dd=DATA[yr]?.[mk]?.[dk];if(!dd)return;dayEntries.push({yr,mk,dk,dd});const mNum=parseInt(mk.slice(4));labels.push(`${parseInt(dk)} ${MONTH_SHORT_TH[mNum]} ${yr}`);});
+  } else if(mode==='month'){
+    selArr.forEach(key=>{const [yr,mk]=key.split('|');getSortedDays(yr,mk).forEach(dk=>{const dd=DATA[yr]?.[mk]?.[dk];if(dd)dayEntries.push({yr,mk,dk,dd});});const mNum=parseInt(mk.slice(4));labels.push(`${MONTH_NAMES_TH[mNum]} ${yr}`);});
+  } else {
+    selArr.forEach(yr=>{getSortedMonths(yr).forEach(mk=>{getSortedDays(yr,mk).forEach(dk=>{const dd=DATA[yr]?.[mk]?.[dk];if(dd)dayEntries.push({yr,mk,dk,dd});});});labels.push(`ปี ${yr}`);});
+  }
+  if(!dayEntries.length){showToast('⚠ ไม่พบข้อมูล');return;}
+
+  const parts=Array(MODELS.length).fill(0),defects=Array(MODELS.length).fill(0),defectTypes={};
+  let peakCount=0,maxPct=0,maxPctLabel='',minPct=999,minPctLabel='';
+  const dailyTrend=[];
+  dayEntries.forEach(({yr,mk,dk,dd})=>{
+    (dd.parts||[]).forEach((v,i)=>parts[i]+=(v||0));
+    (dd.defects||[]).forEach((v,i)=>defects[i]+=(v||0));
+    if(dd.peak)peakCount++;
+    const {total,totalDef,pct}=calcTotals(dd);
+    const mNum=parseInt(mk.slice(4));
+    const dlabel=`${parseInt(dk)} ${MONTH_SHORT_TH[mNum]} ${yr}`;
+    dailyTrend.push({label:dlabel,pct,totalDef,total,peak:dd.peak});
+    if(pct>maxPct&&total>0){maxPct=pct;maxPctLabel=dlabel;}
+    if(pct<minPct&&total>0){minPct=pct;minPctLabel=dlabel;}
+    Object.entries(dd.modelDefects||{}).forEach(([,bd])=>Object.entries(bd).forEach(([type,cnt])=>{defectTypes[type]=(defectTypes[type]||0)+cnt;}));
+  });
+  const totalParts=parts.reduce((a,b)=>a+b,0),totalDef=defects.reduce((a,b)=>a+b,0);
+  const pct=totalParts>0?(totalDef/totalParts*100).toFixed(2):0;
+  const pc=pct>=3?'var(--red)':pct>=1.5?'var(--amber)':'var(--green)';
+  let rangeTitle='';
+  if(mode==='day') rangeTitle=labels.length===1?labels[0]:`${labels.length} วัน`;
+  else if(mode==='month') rangeTitle=labels.length<=3?labels.join(', '):`${labels.length} เดือน`;
+  else rangeTitle='ปี '+labels.join(', ');
+
+  const topDefs=Object.entries(defectTypes).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const topDefHtml=topDefs.map(([type,cnt],i)=>{
+    const pctD=totalDef>0?(cnt/totalDef*100).toFixed(1):0;
+    const bw=topDefs[0][1]>0?(cnt/topDefs[0][1]*100).toFixed(0):0;
+    return`<div class="def-bar-row"><span style="width:18px;font-size:10px;color:var(--text3);">${i+1}</span><span class="def-bar-name">${type}</span><div class="def-bar-track"><div class="def-bar-fill" style="width:${bw}%"></div></div><span class="def-bar-cnt">${cnt}</span><span class="def-bar-pct">${pctD}%</span></div>`;
+  }).join('');
+
+  const modelRows=MODELS.map((m,i)=>{
+    const p=parts[i],d=defects[i];if(p===0&&d===0)return'';
+    const mp=p>0?(d/p*100).toFixed(2):null;
+    return`<tr><td><span class="model-dot" style="background:${MODEL_COLORS[i]};margin-right:6px;"></span>${m}</td><td class="mono">${p.toLocaleString()}</td><td class="mono ${d>0?'red':''}">${d}</td><td class="mono">${mp!==null?mp+'%':'—'}</td><td>${mp!==null?badgeHtml(mp):'—'}</td></tr>`;
+  }).filter(Boolean).join('');
+
+  const trendShow=dailyTrend.length<=25?dailyTrend:[...dailyTrend].sort((a,b)=>b.pct-a.pct).slice(0,25);
+  const maxTrendPct=Math.max(...trendShow.map(t=>t.pct),0.1);
+  const trendHtml=trendShow.map(t=>{
+    const col=t.pct>=3?'var(--red)':t.pct>=1.5?'var(--amber)':'var(--green)';
+    const bw=(t.pct/maxTrendPct*100).toFixed(0);
+    return`<div class="trend-row"><span class="trend-date">${t.label}</span><div class="trend-bar"><div class="trend-bar-fill" style="width:${bw}%;background:${col}"></div></div><span class="trend-pct" style="color:${col}">${t.pct.toFixed(2)}%</span><span style="color:var(--red);font-size:10px;flex-shrink:0;width:14px;">${t.peak?'⚠':''}</span></div>`;
+  }).join('');
+
+  const nonZeroM=MODELS.map((m,i)=>({m,d:defects[i],c:MODEL_COLORS[i]})).filter(x=>x.d>0);
+
+  document.getElementById('panelRight').innerHTML=`
+  <div class="result-header">
+    <div class="result-title">📊 Summary: ${rangeTitle}</div>
+    <div class="result-sub">${dayEntries.length} วัน · ${totalParts.toLocaleString()} ชิ้น · ${peakCount} Peak days</div>
+  </div>
+  <div class="result-body">
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-icon">📦</div><div class="metric-label">ชิ้นงานรวม</div><div class="metric-value" style="color:var(--blue)">${totalParts.toLocaleString()}</div><div class="metric-sub">${dayEntries.length} วัน</div></div>
+      <div class="metric"><div class="metric-icon">⚠️</div><div class="metric-label">Defect รวม</div><div class="metric-value" style="color:var(--red)">${totalDef}</div><div class="metric-sub">Peak: ${peakCount} วัน</div></div>
+      <div class="metric"><div class="metric-icon">📊</div><div class="metric-label">% Defect รวม</div><div class="metric-value" style="color:${pc}">${pct}%</div><div class="metric-sub">เกณฑ์: &lt;1.5%</div></div>
+      <div class="metric"><div class="metric-icon">📈</div><div class="metric-label">สูงสุด / ต่ำสุด</div>
+        <div style="margin-top:4px;">
+          <div style="font-size:13px;color:var(--red);font-weight:700;">${maxPct.toFixed(2)}% <span style="font-size:10px;color:var(--text3);">${maxPctLabel}</span></div>
+          <div style="font-size:13px;color:var(--green);font-weight:700;">${minPct===999?'—':minPct.toFixed(2)+'%'} <span style="font-size:10px;color:var(--text3);">${minPctLabel}</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.3fr 0.7fr;gap:12px;margin-bottom:12px;">
+      <div class="card">
+        <div class="card-title">Defect ตาม Model</div>
+        <table class="def-table">
+          <thead><tr><th>Model</th><th>ชิ้นงาน</th><th>Defect</th><th>%</th><th>ระดับ</th></tr></thead>
+          <tbody>${modelRows}</tbody>
+        </table>
+        <div class="table-footer"><span>รวม</span><span class="mono">${totalParts.toLocaleString()}</span><span class="mono red">${totalDef}</span><span class="mono">${pct}%</span><span>${badgeHtml(pct)}</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="flex:1;">
+          <div class="card-title">Top Defect Types</div>
+          ${topDefHtml||'<div style="color:var(--text3);font-size:12px;">ไม่มีข้อมูล breakdown</div>'}
+        </div>
+        ${nonZeroM.length?`<div class="card">
+          <div class="card-title">สัดส่วน Defect</div>
+          <div style="position:relative;height:160px;"><canvas id="chartDoughnut"></canvas></div>
+        </div>`:''}
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title">${dailyTrend.length>25?`% Defect รายวัน (Top 25 จาก ${dailyTrend.length} วัน)`:'% Defect รายวัน'}</div>
+      ${trendHtml}
+    </div>
+    ${dailyTrend.length>=2?`<div class="card" style="margin-bottom:12px;">
+      <div class="card-title">กราฟ % Defect รายวัน</div>
+      <div style="position:relative;height:200px;"><canvas id="chartLine"></canvas></div>
+    </div>`:''}
+  </div>`;
+
+  Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};
+  const gc='rgba(255,255,255,0.05)',tf={family:'Space Grotesk',size:11};
+  if(nonZeroM.length){
+    charts.dough=new Chart(document.getElementById('chartDoughnut'),{type:'doughnut',data:{labels:nonZeroM.map(x=>x.m),datasets:[{data:nonZeroM.map(x=>x.d),backgroundColor:nonZeroM.map(x=>x.c),borderWidth:2,borderColor:'#13161E'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#8B91A8',font:{family:'Space Grotesk',size:10},boxWidth:10}}}}});
+  }
+  if(dailyTrend.length>=2){
+    const linePts=dailyTrend.map(t=>t.pct>=3?'#FF4D6A':t.pct>=1.5?'#FFB547':'#3DDB8A');
+    charts.line=new Chart(document.getElementById('chartLine'),{type:'line',data:{labels:dailyTrend.map(t=>t.label),datasets:[{label:'% Defect',data:dailyTrend.map(t=>t.pct),borderColor:'#00E5CC',backgroundColor:'rgba(0,229,204,0.07)',pointBackgroundColor:linePts,pointBorderColor:'#0D0F14',pointBorderWidth:2,pointRadius:4,tension:0.35,fill:true,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.parsed.y.toFixed(2)}%`}}},scales:{x:{grid:{display:false},border:{color:gc},ticks:{font:tf,color:'#555C75',maxRotation:40,maxTicksLimit:20}},y:{beginAtZero:true,border:{display:false},grid:{color:gc},ticks:{callback:v=>v.toFixed(1)+'%',font:tf,color:'#555C75'}}}}});
+  }
+  document.getElementById('panelRight').scrollTop=0;
+}
+window.buildSummary=buildSummary;
+
+// TOAST
+let toastT;
+function showToast(msg){let t=document.querySelector('.toast');if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t);}t.textContent=msg;t.style.opacity='1';clearTimeout(toastT);toastT=setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);},2800);}
+
+// INIT
+(async()=>{
+  await loadData();
+  document.getElementById('loadingScreen').style.display='none';
+  getSortedYears().forEach(yr=>{ openNodes['yr_'+yr]=true; getSortedMonths(yr).forEach(mk=>{ openNodes['mk_'+yr+'_'+mk]=true; }); });
+  renderTree();
+})();
+</script>
+</body>
+</html>
