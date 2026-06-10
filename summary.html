@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Q-Gate Summary</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -188,7 +188,15 @@ body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--tex
 // ══════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://rcmmfigunjlfrtcmioye.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjbW1mamd1bmpsZnJ0Y21pb3llIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5ODUwNjcsImV4cCI6MjA5NjU2MTA2N30.ESyBQotLGMR0rMs2rcJ_7mzoqtimly3y3ZMMWcNa_14';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const _supa = window.supabase || (typeof supabase !== 'undefined' ? supabase : null);
+if (!_supa) { document.getElementById('loadingScreen').innerHTML = '<div style="color:#FF4D6A;font-size:14px;padding:2rem;">❌ Supabase SDK โหลดไม่ได้ กรุณา refresh</div>'; }
+const sb = _supa ? _supa.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+if (sb) {
+  sb.from('models').select('count').then(({data,error}) => {
+    if (error) console.error('Supabase test error:', error.message, error);
+    else console.log('Supabase connected OK, models count:', data);
+  });
+}
 
 const MONTH_NAMES_TH = ['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 const MONTH_SHORT_TH = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
