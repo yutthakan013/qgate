@@ -284,6 +284,8 @@ textarea{resize:vertical;min-height:70px;}
 // SUPABASE CONFIG
 // ══════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://rcmmfigunjlfrtcmioye.supabase.co';
+// Disable storage to bypass Edge Tracking Prevention
+const SUPABASE_STORAGE_KEY = null;
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjbW1mamd1bmpsZnJ0Y21pb3llIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5ODUwNjcsImV4cCI6MjA5NjU2MTA2N30.ESyBQotLGMR0rMs2rcJ_7mzoqtimly3y3ZMMWcNa_14';
 // Pure fetch-based Supabase client (no SDK needed)
 const sb = {
@@ -381,8 +383,40 @@ function setSyncStatus(state){ // 'ok' | 'syncing' | 'error'
 // ══════════════════════════════════════════════════════
 // SUPABASE: LOAD DATA
 // ══════════════════════════════════════════════════════
+async function fetchWithTimeout(url, options={}, ms=8000){
+  const ctrl = new AbortController();
+  const id = setTimeout(()=>ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, {...options, signal:ctrl.signal, credentials:'omit', mode:'cors'});
+    clearTimeout(id);
+    return r;
+  } catch(e) {
+    clearTimeout(id);
+    throw e;
+  }
+}
+
+// Override sb fetch to use fetchWithTimeout
+const _origFetch = window.fetch.bind(window);
+const _sbFetch = (url, opts={}) => fetchWithTimeout(url, opts, 8000);
+
 async function loadAllData(){
+  // Show progress
+  const ls = document.getElementById('loadingScreen');
+  if(ls) ls.querySelector('div:last-child').textContent = 'กำลังเชื่อมต่อ Supabase...';
   try{
+    // Test connection first
+    const testUrl = SUPABASE_URL+'/rest/v1/models?select=name&limit=1';
+    const testHeaders = {'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY};
+    let testResp;
+    try {
+      testResp = await fetchWithTimeout(testUrl, {method:'GET', headers:testHeaders}, 8000);
+    } catch(connErr) {
+      throw new Error('ไม่สามารถเชื่อมต่อ Supabase ได้: '+connErr.message+' — กรุณาตรวจสอบอินเทอร์เน็ต หรือ VPN ที่บล็อก supabase.co');
+    }
+    if(!testResp.ok) throw new Error('Supabase ตอบกลับ error: '+testResp.status);
+    
+    if(ls) ls.querySelector('div:last-child').textContent = 'กำลังโหลด Models...';
     // Load models
     const {data:mRows}=await sb.from('models').select('*').order('sort_order');
     if(mRows && mRows.length){
@@ -414,7 +448,18 @@ async function loadAllData(){
   } catch(e){
     console.error('Load error:',e);
     setSyncStatus('error');
-    showToast('⚠ โหลดข้อมูลไม่สำเร็จ: '+e.message);
+    const ls2 = document.getElementById('loadingScreen');
+    if(ls2) ls2.innerHTML = `<div style="color:#FF4D6A;font-size:15px;font-weight:600;padding:2rem;text-align:center;max-width:500px;">
+      ❌ เชื่อมต่อ Supabase ไม่ได้<br>
+      <span style="font-size:12px;color:#8B91A8;margin-top:8px;display:block;">${e.message}</span>
+      <br>
+      <span style="font-size:12px;color:#8B91A8;">กรุณาตรวจสอบ:<br>
+      1. อินเทอร์เน็ตใช้งานได้ปกติ<br>
+      2. ไม่มี Firewall/VPN บล็อก supabase.co<br>
+      3. ลองปิด Ad blocker หรือ Security extension</span>
+      <br><br>
+      <button onclick="location.reload()" style="background:rgba(0,229,204,0.15);color:#00E5CC;border:1px solid rgba(0,229,204,0.3);border-radius:8px;padding:8px 20px;cursor:pointer;font-size:13px;">🔄 ลองใหม่</button>
+    </div>`;
   }
 }
 

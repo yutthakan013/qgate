@@ -187,6 +187,8 @@ body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--tex
 // SUPABASE CONFIG (เดียวกับ index.html)
 // ══════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://rcmmfigunjlfrtcmioye.supabase.co';
+// Disable storage to bypass Edge Tracking Prevention
+const SUPABASE_STORAGE_KEY = null;
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjbW1mamd1bmpsZnJ0Y21pb3llIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5ODUwNjcsImV4cCI6MjA5NjU2MTA2N30.ESyBQotLGMR0rMs2rcJ_7mzoqtimly3y3ZMMWcNa_14';
 const sb = {
   _h: () => ({'apikey': SUPABASE_KEY, 'Authorization': 'Bearer '+SUPABASE_KEY, 'Content-Type': 'application/json'}),
@@ -203,7 +205,7 @@ const sb = {
         this._filters.forEach(f=>params.push(f));
         if(this._orders.length) params.push('order='+this._orders.join(','));
         try {
-          const r = await fetch(sb._url(this._table, params.join('&')), {headers:sb._h()});
+          const r = await fetch(sb._url(this._table, params.join('&')), {method:'GET', headers:sb._h(), credentials:'omit', mode:'cors'});
           const data = await r.json();
           resolve(r.ok ? {data: this._single?(Array.isArray(data)?data[0]:data):data, error:null} : {data:null, error:data});
         } catch(e) { resolve({data:null, error:e}); }
@@ -252,8 +254,18 @@ function setSyncStatus(s){
 // ══════════════════════════════════════════════════════
 // LOAD DATA FROM SUPABASE
 // ══════════════════════════════════════════════════════
+async function fetchWithTimeout(url, options={}, ms=8000){
+  const ctrl = new AbortController();
+  const id = setTimeout(()=>ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, {...options, signal:ctrl.signal, credentials:'omit', mode:'cors'});
+    clearTimeout(id); return r;
+  } catch(e) { clearTimeout(id); throw e; }
+}
+
 async function loadData(){
   setSyncStatus('syncing');
+  const ls = document.getElementById('loadingScreen');
   try{
     const {data:mRows}=await sb.from('models').select('*').order('sort_order');
     if(mRows&&mRows.length){ MODELS=mRows.map(r=>r.name); MODEL_COLORS=mRows.map(r=>r.color); }
@@ -272,7 +284,15 @@ async function loadData(){
       DATA[yr][mk][dk]={parts,defects,modelDefects:row.model_defects||{},topDef:row.top_def||'',peak:!!row.is_peak};
     });
     setSyncStatus('ok');
-  } catch(e){ setSyncStatus('error'); showToast('⚠ โหลดข้อมูลไม่สำเร็จ: '+e.message); }
+  } catch(e){
+    setSyncStatus('error');
+    const ls2 = document.getElementById('loadingScreen');
+    if(ls2) ls2.innerHTML = `<div style="color:#FF4D6A;font-size:15px;font-weight:600;padding:2rem;text-align:center;max-width:500px;">
+      ❌ เชื่อมต่อ Supabase ไม่ได้<br>
+      <span style="font-size:12px;color:#8B91A8;margin-top:8px;display:block;">${e.message}</span><br>
+      <button onclick="location.reload()" style="background:rgba(0,229,204,0.15);color:#00E5CC;border:1px solid rgba(0,229,204,0.3);border-radius:8px;padding:8px 20px;cursor:pointer;font-size:13px;">🔄 ลองใหม่</button>
+    </div>`;
+  }
 }
 
 // ══════════════════════════════════════════════════════
